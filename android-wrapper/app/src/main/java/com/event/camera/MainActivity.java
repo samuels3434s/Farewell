@@ -57,8 +57,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
         // Load your deployed Web App URL
-        // REPLACE THIS with your production Render/Railway HTTPS URL
-        webView.loadUrl("https://your-event-camera-app.onrender.com");
+        webView.loadUrl("https://farewell-tl8b.onrender.com");
     }
 
     private void checkCameraPermission() {
