@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-neutral-950 text-neutral-100 selection:bg-rose-500 selection:text-white">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Host Admin - Event Camera</title>
+  
+  <!-- Tailwind CSS v3 CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Outfit', 'sans-serif'],
+          },
+          animation: {
+            'pulse-glow': 'pulseGlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'fade-in': 'fadeIn 0.3s ease-out forwards',
+          },
+          keyframes: {
+            pulseGlow: {
+              '0%, 100%': { opacity: '0.4', transform: 'scale(1)' },
+              '50%': { opacity: '0.8', transform: 'scale(1.01)' },
+            },
+            fadeIn: {
+              '0%': { opacity: '0', transform: 'translateY(8px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- Custom Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="h-full flex flex-col font-sans select-none overflow-y-auto">
+  
+  <!-- Ambient Lights -->
+  <div class="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-neutral-900 via-neutral-950 to-neutral-950"></div>
+  <div class="absolute top-[-10%] right-[-10%] w-[50%] h-[40%] bg-rose-950/10 rounded-full blur-[100px] pointer-events-none"></div>
+  <div class="absolute bottom-[-10%] left-[-10%] w-[50%] h-[40%] bg-amber-950/10 rounded-full blur-[100px] pointer-events-none"></div>
+
+  <!-- Main Container -->
+  <div class="flex-1 max-w-md w-full mx-auto p-6 flex flex-col justify-center relative">
+    
+    <!-- Top Branding -->
+    <div class="text-center mb-8">
+      <div class="inline-flex w-12 h-12 rounded-xl bg-gradient-to-tr from-rose-500 to-amber-500 items-center justify-center shadow-lg shadow-rose-500/10 mb-3">
+        <i class="fa-solid fa-sliders text-white text-lg"></i>
+      </div>
+      <h1 class="text-2xl font-bold text-white tracking-tight leading-none">Host Control Panel</h1>
+      <p class="text-xs text-neutral-400 mt-2">Manage camera uploads for the Farewell Event</p>
+    </div>
+
+    <!-- CARD: Login / Auth -->
+    <div id="card-auth" class="w-full bg-neutral-900/60 backdrop-blur-xl border border-neutral-800 rounded-2xl p-6 shadow-xl space-y-4 animate-fade-in">
+      <h2 class="text-sm font-semibold text-neutral-300 uppercase tracking-wider">Access Required</h2>
+      <p class="text-xs text-neutral-400">Please enter the admin password set in the environment configuration.</p>
+      
+      <div class="space-y-3">
+        <div class="relative">
+          <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-neutral-500 text-sm">
+            <i class="fa-solid fa-lock"></i>
+          </span>
+          <input type="password" id="input-password" placeholder="Admin Password" class="w-full pl-10 pr-4 py-3 bg-neutral-950 border border-neutral-800 rounded-xl text-white text-sm placeholder-neutral-500 focus:outline-none focus:border-rose-500 transition-colors">
+        </div>
+        <p id="auth-error" class="text-xs text-rose-400 hidden"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Incorrect password. Please try again.</p>
+        <button id="btn-login" class="w-full py-3 rounded-xl bg-gradient-to-r from-rose-500 to-amber-500 text-white font-medium text-sm hover:opacity-90 active:scale-98 transition-all shadow-lg shadow-rose-500/20">
+          Login to Console
+        </button>
+      </div>
+    </div>
+
+    <!-- CARD: Controls (Hidden by default) -->
+    <div id="card-controls" class="w-full bg-neutral-900/60 backdrop-blur-xl border border-neutral-800 rounded-2xl p-6 shadow-xl space-y-6 hidden animate-fade-in">
+      
+      <!-- OAuth Connection Status Banner -->
+      <div id="oauth-status-container" class="p-4 border rounded-xl bg-neutral-950/60 hidden flex-col items-center text-center space-y-3">
+        <!-- Status Indicator Icon -->
+        <div id="oauth-icon" class="w-10 h-10 rounded-full flex items-center justify-center text-lg"></div>
+        <div>
+          <h4 id="oauth-title" class="font-bold text-xs text-white"></h4>
+          <p id="oauth-desc" class="text-[10px] text-neutral-400 mt-1 max-w-[240px] mx-auto"></p>
+        </div>
+        <!-- Link Button -->
+        <a id="btn-oauth-link" href="/api/auth/login" class="inline-flex items-center px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-semibold text-xs transition-colors shadow-lg shadow-rose-500/20">
+          <i class="fa-brands fa-google mr-1.5"></i> Link Google Drive
+        </a>
+      </div>
+
+      <!-- Uploads Toggler Row -->
+      <div class="flex flex-col items-center justify-center p-4 border border-neutral-800 rounded-xl bg-neutral-950/60 space-y-4">
+        
+        <!-- Animated Badge Status -->
+        <div id="badge-status" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold tracking-wide border transition-all">
+          <span class="w-2 h-2 mr-2 rounded-full"></span>
+          <span id="badge-text">Querying...</span>
+        </div>
+
+        <div class="text-center">
+          <h3 class="text-lg font-bold text-white tracking-tight">Camera Upload State</h3>
+          <p class="text-xs text-neutral-400 mt-1 max-w-[280px]">When paused, guests will immediately see a friendly notice instead of taking photos.</p>
+        </div>
+
+        <!-- IOS Style Toggle Switch -->
+        <button id="toggle-switch" class="group relative w-16 h-9 rounded-full bg-neutral-800 transition-colors focus:outline-none flex items-center p-1 cursor-pointer">
+          <div class="w-7 h-7 rounded-full bg-white shadow-md transform translate-x-0 transition-transform duration-200 ease-in-out"></div>
+        </button>
+      </div>
+
+      <!-- Server Details Info -->
+      <div class="space-y-3">
+        <h3 class="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Server Environment</h3>
+        
+        <div class="divide-y divide-neutral-800 text-xs">
+          <div class="py-2.5 flex justify-between">
+            <span class="text-neutral-400">Connection Mode</span>
+            <span id="info-mode" class="font-medium text-white">-</span>
+          </div>
+          <div class="py-2.5 flex justify-between">
+            <span class="text-neutral-400">Google Drive API</span>
+            <span id="info-drive" class="font-medium text-white">-</span>
+          </div>
+          <div class="py-2.5 flex justify-between">
+            <span class="text-neutral-400">Local Time</span>
+            <span id="info-time" class="font-medium text-white">-</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Log out -->
+      <div class="pt-2">
+        <button id="btn-logout" class="w-full py-2.5 rounded-xl border border-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-800 text-xs font-medium transition-colors">
+          Logout Control Panel
+        </button>
+      </div>
+    </div>
+
+    <!-- Tiny Footer -->
+    <div class="text-center mt-6 text-[10px] text-neutral-600">
+      Farewell Event System &bull; Secure Administrator Panel
+    </div>
+
+  </div>
+
+  <!-- Script logic -->
+  <script>
+    const cardAuth = document.getElementById('card-auth');
+    const cardControls = document.getElementById('card-controls');
+    const inputPassword = document.getElementById('input-password');
+    const btnLogin = document.getElementById('btn-login');
+    const authError = document.getElementById('auth-error');
+    
+    const toggleSwitch = document.getElementById('toggle-switch');
+    const toggleHandle = toggleSwitch.querySelector('div');
+    const badgeStatus = document.getElementById('badge-status');
+    const badgeText = document.getElementById('badge-text');
+    
+    // Environment Info elements
+    const infoMode = document.getElementById('info-mode');
+    const infoDrive = document.getElementById('info-drive');
+    const infoTime = document.getElementById('info-time');
+    const btnLogout = document.getElementById('btn-logout');
+
+    // OAuth Info Banner elements
+    const oauthContainer = document.getElementById('oauth-status-container');
+    const oauthIcon = document.getElementById('oauth-icon');
+    const oauthTitle = document.getElementById('oauth-title');
+    const oauthDesc = document.getElementById('oauth-desc');
+    const oauthBtn = document.getElementById('btn-oauth-link');
+
+    let isUploadsEnabled = true;
+    let cachedPassword = sessionStorage.getItem('admin_password') || '';
+
+    // Check auth on load
+    window.addEventListener('DOMContentLoaded', () => {
+      if (cachedPassword) {
+        verifyPassword(cachedPassword);
+      }
+      updateTime();
+      setInterval(updateTime, 1000);
+    });
+
+    function updateTime() {
+      const now = new Date();
+      infoTime.textContent = now.toLocaleTimeString();
+    }
+
+    btnLogin.addEventListener('click', () => {
+      const password = inputPassword.value;
+      if (!password) return;
+      verifyPassword(password);
+    });
+
+    inputPassword.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        btnLogin.click();
+      }
+    });
+
+    async function verifyPassword(password) {
+      try {
+        const res = await fetch('/api/admin/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password, enabled: isUploadsEnabled })
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          cachedPassword = password;
+          sessionStorage.setItem('admin_password', password);
+          authError.classList.add('hidden');
+          
+          showControls();
+          fetchServerStatus();
+        } else {
+          authError.classList.remove('hidden');
+          sessionStorage.removeItem('admin_password');
+          inputPassword.value = '';
+        }
+      } catch (err) {
+        console.error('Auth check failed:', err);
+        authError.classList.remove('hidden');
+        authError.textContent = "Cannot connect to server API.";
+      }
+    }
+
+    async function fetchServerStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        
+        isUploadsEnabled = data.uploads_enabled;
+        updateToggleUI(isUploadsEnabled);
+
+        // Fill environment details
+        infoMode.textContent = data.is_mock_mode ? 'Developer Mock Mode' : 'Production Cloud';
+        infoMode.className = data.is_mock_mode ? 'font-medium text-amber-400' : 'font-medium text-emerald-400';
+
+        // Render Google Drive connection status
+        oauthContainer.classList.remove('hidden');
+        oauthContainer.classList.add('flex');
+
+        if (data.is_mock_mode) {
+          // Hide OAuth banner completely if running in mock mode
+          oauthContainer.classList.remove('flex');
+          oauthContainer.classList.add('hidden');
+          
+          infoDrive.textContent = 'Simulated (Mock Mode)';
+          infoDrive.className = 'font-medium text-amber-400';
+        } else if (data.is_authorized) {
+          // Authorized state
+          oauthIcon.className = "w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/35 flex items-center justify-center text-emerald-400 text-lg";
+          oauthIcon.innerHTML = '<i class="fa-solid fa-circle-check"></i>';
+          oauthTitle.textContent = "Google Drive Linked";
+          oauthDesc.textContent = "Server is authorized to save files to your personal Google Drive account.";
+          oauthBtn.classList.add('hidden');
+          
+          infoDrive.textContent = data.folder_configured ? 'Connected & Authorized' : 'Authorized, Missing Folder ID';
+          infoDrive.className = data.folder_configured ? 'font-medium text-emerald-400' : 'font-medium text-amber-400';
+        } else {
+          // Unauthorized state
+          oauthIcon.className = "w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/35 flex items-center justify-center text-amber-400 text-lg animate-pulse";
+          oauthIcon.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i>';
+          oauthTitle.textContent = "Google Drive Link Required";
+          
+          if (data.client_secrets_present) {
+            oauthDesc.textContent = "A one-time auth is required to link this application to your personal Gmail account.";
+            oauthBtn.classList.remove('hidden');
+            oauthBtn.textContent = "Link Google Account";
+            oauthBtn.href = "/api/auth/login";
+            oauthBtn.className = "inline-flex items-center px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-semibold text-xs transition-colors shadow-lg shadow-rose-500/20";
+          } else {
+            oauthDesc.textContent = "Missing 'client_secrets.json' in the root directory. Link setup is blocked.";
+            oauthBtn.classList.remove('hidden');
+            oauthBtn.textContent = "Waiting for Secrets File";
+            oauthBtn.href = "#";
+            oauthBtn.className = "inline-flex items-center px-4 py-2.5 rounded-xl bg-neutral-850 border border-neutral-800 text-neutral-500 text-xs cursor-default";
+          }
+          
+          infoDrive.textContent = 'Not Authorized';
+          infoDrive.className = 'font-medium text-rose-500';
+        }
+
+      } catch (err) {
+        console.error('Error fetching server status:', err);
+      }
+    }
+
+    function updateToggleUI(enabled) {
+      if (enabled) {
+        toggleSwitch.classList.remove('bg-neutral-800');
+        toggleSwitch.classList.add('bg-rose-500');
+        toggleHandle.classList.add('translate-x-7');
+        
+        badgeStatus.className = "inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold tracking-wide border bg-emerald-500/10 text-emerald-400 border-emerald-500/35";
+        badgeStatus.querySelector('span').className = "w-2 h-2 mr-2 rounded-full bg-emerald-400 animate-pulse";
+        badgeText.textContent = "Camera Active (Uploads Enabled)";
+      } else {
+        toggleSwitch.classList.remove('bg-rose-500');
+        toggleSwitch.classList.add('bg-neutral-800');
+        toggleHandle.classList.remove('translate-x-7');
+        
+        badgeStatus.className = "inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold tracking-wide border bg-rose-500/10 text-rose-400 border-rose-500/35";
+        badgeStatus.querySelector('span').className = "w-2 h-2 mr-2 rounded-full bg-rose-400";
+        badgeText.textContent = "Camera Paused (Uploads Blocked)";
+      }
+    }
+
+    // Toggle click event
+    toggleSwitch.addEventListener('click', async () => {
+      const targetState = !isUploadsEnabled;
+      updateToggleUI(targetState);
+
+      try {
+        const res = await fetch('/api/admin/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: cachedPassword, enabled: targetState })
+        });
+        const data = await res.json();
+        
+        if (res.ok && data.success) {
+          isUploadsEnabled = data.uploads_enabled;
+          updateToggleUI(isUploadsEnabled);
+        } else {
+          alert(data.error || 'Failed to update toggle on server.');
+          updateToggleUI(isUploadsEnabled);
+        }
+      } catch (err) {
+        console.error('Toggle request error:', err);
+        alert('Connection error. Failed to toggle uploads.');
+        updateToggleUI(isUploadsEnabled);
+      }
+    });
+
+    function showControls() {
+      cardAuth.classList.add('hidden');
+      cardControls.classList.remove('hidden');
+    }
+
+    function showAuth() {
+      cardAuth.classList.remove('hidden');
+      cardControls.classList.add('hidden');
+      inputPassword.value = '';
+    }
+
+    btnLogout.addEventListener('click', () => {
+      sessionStorage.removeItem('admin_password');
+      cachedPassword = '';
+      showAuth();
+    });
+  </script>
+</body>
+</html>

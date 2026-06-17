@@ -1,0 +1,22 @@
+# Environment Variables and Credentials
+.env
+token.json
+client_secrets.json
+credentials.json
+upload_status.json
+
+# Python System files
+__pycache__/
+*.pyc
+
+# IDE configurations
+.idea/
+.vscode/
+
+# Gradle / Android Studio build files
+android-wrapper/.gradle/
+android-wrapper/local.properties
+android-wrapper/.idea/
+android-wrapper/app/build/
+android-wrapper/build/
+*.apk

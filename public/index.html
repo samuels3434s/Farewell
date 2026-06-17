@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-neutral-950 text-neutral-100 selection:bg-rose-500 selection:text-white">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Event Camera Share</title>
+  
+  <!-- Tailwind CSS v3 CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Outfit', 'sans-serif'],
+          },
+          animation: {
+            'pulse-glow': 'pulseGlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'spin-slow': 'spin 3s linear infinite',
+            'fade-in': 'fadeIn 0.2s ease-out forwards',
+          },
+          keyframes: {
+            pulseGlow: {
+              '0%, 100%': { opacity: '0.6', transform: 'scale(1)' },
+              '50%': { opacity: '1', transform: 'scale(1.02)' },
+            },
+            fadeIn: {
+              '0%': { opacity: '0', transform: 'translateY(4px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- Custom Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- PWA Metadata -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Event Camera">
+</head>
+<body class="h-full flex flex-col font-sans select-none overflow-hidden safe-bottom">
+  
+  <!-- Background Ambient Lights -->
+  <div class="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-rose-950/20 via-neutral-950 to-neutral-950"></div>
+  <div class="absolute top-[-20%] left-[-10%] w-[60%] h-[50%] bg-purple-900/10 rounded-full blur-[120px] pointer-events-none"></div>
+  <div class="absolute bottom-[-10%] right-[-10%] w-[60%] h-[50%] bg-rose-900/10 rounded-full blur-[120px] pointer-events-none"></div>
+
+  <!-- App Wrapper (centers layout on desktop, full screen on mobile) -->
+  <div class="flex-1 max-w-md w-full mx-auto flex flex-col relative bg-neutral-950/40 backdrop-blur-md border-x border-neutral-900 shadow-2xl overflow-hidden">
+    
+    <!-- Top Header -->
+    <header class="pt-6 px-5 pb-4 flex justify-between items-center border-b border-neutral-900">
+      <div class="flex items-center space-x-2.5">
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-rose-500 to-amber-500 flex items-center justify-center shadow-lg shadow-rose-500/20">
+          <i class="fa-solid fa-camera text-white text-sm"></i>
+        </div>
+        <div>
+          <h1 class="text-base font-semibold tracking-tight text-white leading-none">Farewell Memory</h1>
+          <span class="text-[10px] text-neutral-400 font-light tracking-wide uppercase">Guest Event Camera</span>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2">
+        <!-- Active Status Indicator -->
+        <span id="live-indicator" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+          <span class="w-1.5 h-1.5 mr-1 bg-emerald-400 rounded-full animate-pulse"></span> Live Drive
+        </span>
+      </div>
+    </header>
+
+    <!-- Camera Viewport Section -->
+    <main class="flex-1 flex flex-col justify-center items-center p-4 relative overflow-hidden">
+      <div id="camera-container" class="relative w-full aspect-[3/4] max-h-[70vh] rounded-2xl border border-neutral-800 bg-neutral-900/80 shadow-2xl overflow-hidden flex items-center justify-center">
+        
+        <!-- Video Element (Mirrored dynamically if front camera) -->
+        <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover"></video>
+        
+        <!-- Status Overlays inside viewport -->
+        
+        <!-- Permission & Camera Load Overlay -->
+        <div id="status-permission" class="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center p-6 text-center space-y-4 animate-fade-in">
+          <div class="w-16 h-16 rounded-full bg-neutral-900 flex items-center justify-center border border-neutral-800 text-rose-400 text-2xl">
+            <i class="fa-solid fa-video-slash"></i>
+          </div>
+          <div>
+            <h2 class="text-lg font-semibold text-white">Camera Access Required</h2>
+            <p class="text-sm text-neutral-400 mt-1 max-w-[280px] mx-auto">Please allow camera access in your browser to snap and share photos directly to the event drive.</p>
+          </div>
+          <button id="btn-request-permission" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-amber-500 text-white font-medium text-sm hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-rose-500/20">
+            Enable Camera
+          </button>
+        </div>
+
+        <!-- Camera Paused Overlay (Host Control Panel Switch) -->
+        <div id="overlay-paused" class="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center p-6 text-center space-y-4 hidden animate-fade-in">
+          <div class="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 text-2xl animate-pulse">
+            <i class="fa-solid fa-circle-pause"></i>
+          </div>
+          <div>
+            <h2 class="text-lg font-semibold text-white">Uploads Currently Paused</h2>
+            <p class="text-sm text-neutral-400 mt-1 max-w-[280px] mx-auto">The event host has temporarily paused camera sharing. Photos cannot be uploaded right now.</p>
+          </div>
+        </div>
+
+        <!-- Capture Animation Flash Overlay -->
+        <div id="camera-flash" class="absolute inset-0 bg-white opacity-0 transition-opacity duration-150 pointer-events-none"></div>
+
+        <!-- Single consolidated Toast Notifications Area (floats over bottom of viewport) -->
+        <div id="toast-container" class="absolute bottom-4 left-4 right-4 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+      </div>
+    </main>
+
+    <!-- Camera Actions & Settings Footer -->
+    <footer class="px-6 pb-8 pt-4 flex flex-col justify-end items-center space-y-6">
+      
+      <!-- Primary Controls Row -->
+      <div class="w-full flex justify-between items-center px-4">
+        
+        <!-- Gallery Preview Thumb (Dummy visual to ground layout) -->
+        <div class="w-12 h-12 rounded-full border border-neutral-800 bg-neutral-900/60 flex items-center justify-center text-neutral-500">
+          <i class="fa-solid fa-images text-lg"></i>
+        </div>
+
+        <!-- Capture Trigger (Outer ring + central glow button) -->
+        <button id="btn-capture" class="group relative w-20 h-20 rounded-full flex items-center justify-center focus:outline-none transition-transform active:scale-90" disabled>
+          <!-- Outer border ring -->
+          <div class="absolute inset-0 rounded-full border-4 border-neutral-700 group-hover:border-white transition-colors duration-200"></div>
+          <!-- Inner circle -->
+          <div class="w-16 h-16 rounded-full bg-gradient-to-tr from-rose-500 to-amber-500 group-active:from-rose-600 group-active:to-amber-600 shadow-lg shadow-rose-500/30 flex items-center justify-center transition-all">
+            <i class="fa-solid fa-camera text-white text-xl"></i>
+          </div>
+        </button>
+
+        <!-- Toggle camera button -->
+        <button id="btn-toggle-camera" class="w-12 h-12 rounded-full border border-neutral-800 bg-neutral-900/60 hover:bg-neutral-800 flex items-center justify-center text-neutral-300 active:scale-90 transition-all focus:outline-none">
+          <i class="fa-solid fa-arrows-rotate text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Detail/Subtext -->
+      <p class="text-[10px] text-neutral-500 text-center tracking-wide uppercase font-light">
+        Photos are uploaded at full native resolution directly to the album.
+      </p>
+
+    </footer>
+
+    <!-- Hidden native elements for photo capturing -->
+    <canvas id="capture-canvas" class="hidden"></canvas>
+  </div>
+
+  <!-- Javascript Logic -->
+  <script>
+    // Constants and state variables
+    const webcam = document.getElementById('webcam');
+    const captureCanvas = document.getElementById('capture-canvas');
+    const cameraContainer = document.getElementById('camera-container');
+    const flashOverlay = document.getElementById('camera-flash');
+    const liveIndicator = document.getElementById('live-indicator');
+    const toastContainer = document.getElementById('toast-container');
+    
+    // Buttons
+    const btnCapture = document.getElementById('btn-capture');
+    const btnToggleCamera = document.getElementById('btn-toggle-camera');
+    const btnRequestPermission = document.getElementById('btn-request-permission');
+    
+    // Status Overlays
+    const overlayPermission = document.getElementById('status-permission');
+    const overlayPaused = document.getElementById('overlay-paused');
+
+    let stream = null;
+    let activeFacingMode = 'environment'; // Default: Back camera
+    
+    let uploadsEnabled = true;
+    let isPollingStatus = false;
+
+    // Single Status Notification System State
+    let activeUploadsCount = 0;
+    let failedUploadsQueue = []; // Holds arrays of {blob, filename} for retries
+    let successTimeout = null;
+    let currentToastElement = null;
+
+    function updateStatusIndicator() {
+      // Clear any auto-dismiss timer for success messages
+      if (successTimeout) {
+        clearTimeout(successTimeout);
+        successTimeout = null;
+      }
+
+      if (activeUploadsCount > 0) {
+        // Show consolidated uploading status
+        ensureToastElement();
+        currentToastElement.className = 'pointer-events-auto bg-neutral-900/95 backdrop-blur-md border border-neutral-800/80 px-4 py-3 rounded-xl text-xs text-neutral-100 flex items-center justify-between shadow-2xl transition-all duration-300';
+        currentToastElement.innerHTML = `
+          <div class="flex items-center space-x-2.5">
+            <i class="fa-solid fa-spinner animate-spin text-rose-500"></i>
+            <span class="font-medium text-[11px]">Uploading ${activeUploadsCount} photo${activeUploadsCount > 1 ? 's' : ''}...</span>
+          </div>
+        `;
+      } else if (failedUploadsQueue.length > 0) {
+        // Show consolidated failures with retry option
+        ensureToastElement();
+        currentToastElement.className = 'pointer-events-auto bg-neutral-900/95 backdrop-blur-md border border-neutral-800/80 px-4 py-3 rounded-xl text-xs text-neutral-100 flex items-center justify-between shadow-2xl transition-all duration-300';
+        
+        const count = failedUploadsQueue.length;
+        currentToastElement.innerHTML = `
+          <div class="flex items-center space-x-2.5">
+            <i class="fa-solid fa-circle-exclamation text-rose-500"></i>
+            <span class="font-medium text-[11px]">${count} photo${count > 1 ? 's' : ''} failed to upload.</span>
+          </div>
+          <button class="btn-toast-retry-all text-[10px] text-white bg-rose-500/20 border border-rose-500/35 hover:bg-rose-500/30 px-2 py-0.5 rounded font-semibold transition-colors">Retry All</button>
+        `;
+
+        const retryBtn = currentToastElement.querySelector('.btn-toast-retry-all');
+        if (retryBtn) {
+          retryBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const itemsToRetry = [...failedUploadsQueue];
+            failedUploadsQueue = [];
+            dismissCurrentToast();
+            itemsToRetry.forEach(item => {
+              uploadPhotoInBackground(item.blob, item.filename);
+            });
+          });
+        }
+      } else {
+        // Active = 0, Failures = 0. Briefly flash success if toast is currently shown
+        if (currentToastElement) {
+          currentToastElement.className = 'pointer-events-auto bg-neutral-900/95 backdrop-blur-md border border-neutral-800/80 px-4 py-3 rounded-xl text-xs text-neutral-100 flex items-center justify-between shadow-2xl transition-all duration-300';
+          currentToastElement.innerHTML = `
+            <div class="flex items-center space-x-2.5">
+              <i class="fa-solid fa-circle-check text-emerald-400"></i>
+              <span class="font-medium text-[11px]">Photos uploaded successfully!</span>
+            </div>
+          `;
+          successTimeout = setTimeout(() => {
+            dismissCurrentToast();
+          }, 3000);
+        }
+      }
+    }
+
+    function ensureToastElement() {
+      if (!currentToastElement) {
+        currentToastElement = document.createElement('div');
+        currentToastElement.className = 'pointer-events-auto bg-neutral-900/95 backdrop-blur-md border border-neutral-800/80 px-4 py-3 rounded-xl text-xs text-neutral-100 flex items-center justify-between shadow-2xl transition-all duration-300 transform translate-y-3 opacity-0';
+        toastContainer.appendChild(currentToastElement);
+        
+        // Trigger animation entry
+        setTimeout(() => {
+          if (currentToastElement) {
+            currentToastElement.classList.remove('translate-y-3', 'opacity-0');
+          }
+        }, 20);
+      }
+    }
+
+    function dismissCurrentToast() {
+      if (!currentToastElement) return;
+      const target = currentToastElement;
+      currentToastElement = null; // Unbind
+      
+      target.classList.add('translate-y-[-10px]', 'opacity-0');
+      setTimeout(() => {
+        target.remove();
+      }, 300);
+    }
+
+    // Fetch upload toggle status from the server
+    async function checkServerStatus() {
+      if (isPollingStatus) return;
+      isPollingStatus = true;
+
+      try {
+        const res = await fetch('/api/status');
+        if (res.ok) {
+          const data = await res.json();
+          const serverUploadsEnabled = data.uploads_enabled;
+          
+          if (serverUploadsEnabled !== uploadsEnabled) {
+            uploadsEnabled = serverUploadsEnabled;
+            console.log(`Server upload status changed: ${uploadsEnabled}`);
+            
+            if (uploadsEnabled) {
+              // Hide paused overlay, enable capture button
+              overlayPaused.classList.add('hidden');
+              liveIndicator.className = "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/25";
+              liveIndicator.innerHTML = '<span class="w-1.5 h-1.5 mr-1 bg-emerald-400 rounded-full animate-pulse"></span> Live Drive';
+              
+              // Only start camera if not currently running and permissions aren't blocking
+              if (!stream && overlayPermission.classList.contains('hidden')) {
+                startCamera();
+              }
+            } else {
+              // Show paused overlay, stop camera, disable capture button
+              overlayPaused.classList.remove('hidden');
+              liveIndicator.className = "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/25";
+              liveIndicator.innerHTML = '<span class="w-1.5 h-1.5 mr-1 bg-rose-400 rounded-full"></span> Paused';
+              
+              btnCapture.disabled = true;
+              stopCamera();
+              dismissCurrentToast();
+              failedUploadsQueue = [];
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to query upload status from backend:', err);
+      } finally {
+        isPollingStatus = false;
+      }
+    }
+
+    // Initialize camera stream
+    async function startCamera() {
+      // If uploads are paused, do not start stream, just render paused screen
+      if (!uploadsEnabled) {
+        overlayPaused.classList.remove('hidden');
+        btnCapture.disabled = true;
+        return;
+      }
+
+      // Clean up existing stream
+      stopCamera();
+
+      console.log(`Starting camera facing: ${activeFacingMode}...`);
+      
+      const constraints = {
+        video: {
+          facingMode: { ideal: activeFacingMode },
+          // Request maximum resolutions to capture uncompressed full-quality files
+          width: { ideal: 4096 },
+          height: { ideal: 2160 }
+        },
+        audio: false
+      };
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        webcam.srcObject = stream;
+        
+        // Hide permission overlay once stream starts
+        overlayPermission.classList.add('hidden');
+        btnCapture.disabled = false;
+
+        // Apply mirroring CSS transform if front camera (selfie)
+        const isFront = isFrontFacingTrack(stream);
+        if (isFront) {
+          webcam.style.transform = 'scaleX(-1)';
+        } else {
+          webcam.style.transform = 'none';
+        }
+
+        // Wait for metadata to load to get dimensions
+        webcam.onloadedmetadata = () => {
+          console.log(`Camera loaded metadata. Aspect ratio: ${webcam.videoWidth}x${webcam.videoHeight}`);
+        };
+
+      } catch (err) {
+        console.error('Error opening camera stream: ', err);
+        overlayPermission.classList.remove('hidden');
+        btnCapture.disabled = true;
+      }
+    }
+
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+      webcam.srcObject = null;
+    }
+
+    // Check if the current video track is front facing
+    function isFrontFacingTrack(mediaStream) {
+      if (!mediaStream) return false;
+      const track = mediaStream.getVideoTracks()[0];
+      if (!track) return false;
+      
+      const settings = track.getSettings();
+      if (settings.facingMode) {
+        return settings.facingMode === 'user';
+      }
+      // Fallback checks
+      const label = track.label ? track.label.toLowerCase() : '';
+      return label.includes('front') || label.includes('selfie') || label.includes('user');
+    }
+
+    // Toggle camera between front and back
+    btnToggleCamera.addEventListener('click', () => {
+      activeFacingMode = (activeFacingMode === 'user') ? 'environment' : 'user';
+      
+      // Animate the flip button
+      const icon = btnToggleCamera.querySelector('i');
+      icon.classList.add('rotate-180');
+      setTimeout(() => icon.classList.remove('rotate-180'), 300);
+
+      startCamera();
+    });
+
+    // Capture Image from Webcam stream at native resolution
+    btnCapture.addEventListener('click', () => {
+      if (!stream || !uploadsEnabled) return;
+
+      // Trigger visual camera shutter flash effect
+      flashOverlay.classList.remove('transition-opacity');
+      flashOverlay.classList.add('opacity-100');
+      setTimeout(() => {
+        flashOverlay.classList.add('transition-opacity');
+        flashOverlay.classList.remove('opacity-100');
+      }, 100);
+
+      // Extract raw tracks dimensions to capture full resolution
+      const videoTrack = stream.getVideoTracks()[0];
+      const settings = videoTrack.getSettings();
+      const captureWidth = settings.width || webcam.videoWidth;
+      const captureHeight = settings.height || webcam.videoHeight;
+      
+      console.log(`Capturing frame at full native resolution: ${captureWidth}x${captureHeight}`);
+
+      // Set canvas dimension matching native camera stream
+      captureCanvas.width = captureWidth;
+      captureCanvas.height = captureHeight;
+
+      const ctx = captureCanvas.getContext('2d');
+      
+      // If camera is front-facing, mirror the drawn image as well for natural capture
+      const isFront = isFrontFacingTrack(stream);
+      if (isFront) {
+        ctx.translate(captureCanvas.width, 0);
+        ctx.scale(-1, 1);
+      }
+
+      // Draw the video frame to the hidden canvas
+      ctx.drawImage(webcam, 0, 0, captureCanvas.width, captureCanvas.height);
+
+      // Convert canvas drawing into uncompressed JPG blob (Quality = 1.0)
+      captureCanvas.toBlob((blob) => {
+        if (blob) {
+          const timestamp = Date.now();
+          const filename = `photo_${timestamp}.jpg`;
+          console.log(`Blob created. Size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
+          
+          // Trigger upload in background immediately, keeping the camera active!
+          uploadPhotoInBackground(blob, filename);
+        } else {
+          // If canvas capture fails, add to failure list
+          failedUploadsQueue.push({ blob: null, filename: `failed_capture_${Date.now()}.jpg` });
+          updateStatusIndicator();
+        }
+      }, 'image/jpeg', 1.0);
+    });
+
+    // Send photo in background
+    async function uploadPhotoInBackground(blob, filename) {
+      // Increment active uploads and update display banner
+      activeUploadsCount++;
+      updateStatusIndicator();
+
+      const formData = new FormData();
+      formData.append('photo', blob, filename);
+
+      try {
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await response.json();
+        activeUploadsCount = Math.max(0, activeUploadsCount - 1);
+
+        if (response.ok && data.success) {
+          // Photo uploaded successfully, updating display
+          updateStatusIndicator();
+        } else {
+          // If server reports uploads are disabled, update layout
+          if (response.status === 400 && data.error && data.error.includes('closed')) {
+            uploadsEnabled = false;
+            overlayPaused.classList.remove('hidden');
+            liveIndicator.className = "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/25";
+            liveIndicator.innerHTML = '<span class="w-1.5 h-1.5 mr-1 bg-rose-400 rounded-full"></span> Paused';
+            stopCamera();
+            dismissCurrentToast();
+            failedUploadsQueue = [];
+          } else {
+            // Queue failure
+            failedUploadsQueue.push({ blob, filename });
+            updateStatusIndicator();
+          }
+        }
+      } catch (err) {
+        console.error('Error during upload request: ', err);
+        activeUploadsCount = Math.max(0, activeUploadsCount - 1);
+        failedUploadsQueue.push({ blob, filename });
+        updateStatusIndicator();
+      }
+    }
+
+    // Event Listeners for permission
+    btnRequestPermission.addEventListener('click', startCamera);
+
+    // Start App Sequence
+    async function initApp() {
+      // 1. Initial status query
+      await checkServerStatus();
+      
+      // 2. Start camera
+      startCamera();
+      
+      // 3. Start background polling (every 5 seconds) to catch Host toggles
+      setInterval(checkServerStatus, 5000);
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      initApp();
+    });
+
+    // Handle visibility changes to restart/stop camera stream (battery conservation)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        if (!stream && overlayPermission.classList.contains('hidden') && uploadsEnabled) {
+          startCamera();
+        }
+        checkServerStatus();
+      } else {
+        stopCamera();
+      }
+    });
+  </script>
+</body>
+</html>
