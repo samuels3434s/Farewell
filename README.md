@@ -98,7 +98,7 @@ Deploying to the cloud keeps the app online 24/7.
 3. Link your GitHub repository.
 4. Select environment: **Python 3**.
 5. Set the Build Command: `pip install -r requirements.txt`
-6. Set the Start Command: `python server.py`
+6. Set the Start Command: `gunicorn server:app`
 7. Click **Advanced** and add the following Environment Variables:
    - `DRIVE_FOLDER_ID`: Your Google Drive Folder ID.
    - `ADMIN_PASSWORD`: Secret code to access the admin panel.
