@@ -24,6 +24,19 @@ STATUS_FILE = 'upload_status.json'
 TOKEN_FILE = 'token.json'
 CLIENT_SECRETS_FILE = 'client_secrets.json'
 
+# Reconstruct client_secrets.json from environment variable on Cloud Hosts
+client_secrets_env = os.getenv('GOOGLE_CLIENT_SECRETS')
+if client_secrets_env and not os.path.exists(CLIENT_SECRETS_FILE):
+    try:
+        # Validate that it is valid JSON
+        json_data = json.loads(client_secrets_env)
+        with open(CLIENT_SECRETS_FILE, 'w') as f:
+            json.dump(json_data, f)
+        print("Successfully reconstructed client_secrets.json from environment variable!", flush=True)
+    except Exception as e:
+        print(f"Error reconstructing client_secrets.json: {e}", flush=True)
+
+
 # Google Drive Client variables
 drive_service = None
 is_mock_mode = False

@@ -103,6 +103,7 @@ Deploying to the cloud keeps the app online 24/7.
    - `DRIVE_FOLDER_ID`: Your Google Drive Folder ID.
    - `ADMIN_PASSWORD`: Secret code to access the admin panel.
    - `SECRET_KEY`: Any random text string.
+   - `GOOGLE_CLIENT_SECRETS`: Paste the entire text content of your local `client_secrets.json` file here (raw JSON).
 8. Click **Deploy**. Copy your new HTTPS URL (e.g. `https://your-app.onrender.com`).
 9. Go to your **Google Cloud Console** > **Credentials**, edit your OAuth Client ID, and add `https://your-app.onrender.com/api/auth/callback` to the **Authorized redirect URIs**.
 10. Open `https://your-app.onrender.com/admin` in your browser, log in, and click **Link Google Account** to generate the production `token.json` state.
