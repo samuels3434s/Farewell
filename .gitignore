@@ -20,3 +20,7 @@ android-wrapper/.idea/
 android-wrapper/app/build/
 android-wrapper/build/
 *.apk
+*.jks
+lumisnap-release
+android-wrapper/app/release/
+
