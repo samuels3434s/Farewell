@@ -374,17 +374,57 @@
     let successTimeout = null;
     let currentToastElement = null;
 
+    // Reusable custom Toast notification builder
+    function showNotificationToast(message, duration = 3000, type = 'info') {
+      const toast = document.createElement('div');
+      toast.className = 'pointer-events-auto bg-neutral-900/95 backdrop-blur-md border border-neutral-800/80 px-4 py-3 rounded-xl text-xs text-neutral-100 flex items-center space-x-2.5 shadow-2xl transition-all duration-300 transform translate-y-3 opacity-0';
+      
+      let icon = '<i class="fa-solid fa-circle-info text-blue-400"></i>';
+      if (type === 'success') {
+        icon = '<i class="fa-solid fa-circle-check text-emerald-400"></i>';
+      } else if (type === 'warning') {
+        icon = '<i class="fa-solid fa-triangle-exclamation text-amber-400"></i>';
+      } else if (type === 'error') {
+        icon = '<i class="fa-solid fa-circle-exclamation text-rose-500"></i>';
+      }
+
+      toast.innerHTML = `
+        ${icon}
+        <span class="font-medium text-[11px]">${message}</span>
+      `;
+      
+      toastContainer.appendChild(toast);
+      
+      // Animate entry
+      setTimeout(() => {
+        toast.classList.remove('translate-y-3', 'opacity-0');
+      }, 20);
+      
+      // Animate exit & cleanup
+      setTimeout(() => {
+        toast.classList.add('translate-y-[-10px]', 'opacity-0');
+        setTimeout(() => {
+          toast.remove();
+        }, 300);
+      }, duration);
+    }
+
     // Helper to detect supported mime type for video recording
     function getSupportedMimeType() {
+      // Prioritize WebM codecs with explicit Opus audio encoding for Android Chrome/WebView compatibility.
+      // Falls back to MP4 codecs for iOS Safari.
       const types = [
-        'video/mp4;codecs=h264',
-        'video/mp4',
-        'video/webm;codecs=h264',
-        'video/webm;codecs=vp8',
-        'video/webm'
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm;codecs=h264,opus',
+        'video/webm',
+        'video/mp4;codecs=h264,opus',
+        'video/mp4;codecs=h264,aac',
+        'video/mp4'
       ];
       for (const type of types) {
         if (MediaRecorder.isTypeSupported(type)) {
+          console.log(`MediaRecorder selected supported format: ${type}`);
           return type;
         }
       }
@@ -493,6 +533,12 @@
       document.getElementById('subtext-description').textContent = "Videos are recorded up to 15s in background.";
       
       updateCaptureButtonUI();
+
+      // Ensure camera is restarted to request mic permission if stream has no audio tracks
+      if (stream && stream.getAudioTracks().length === 0) {
+        console.log("Switching to Video mode, but no active audio track exists. Restarting camera...");
+        startCamera();
+      }
     });
 
     function updateCaptureButtonUI() {
@@ -711,6 +757,10 @@
           audioTracks.forEach(t => {
             console.log(`- Audio track: "${t.label}" (enabled: ${t.enabled}, state: ${t.readyState})`);
           });
+
+          if (audioTracks.length === 0 && activeCaptureMode === 'video') {
+            showNotificationToast("Microphone access failed. Videos will record without sound.", 4000, "warning");
+          }
 
           // Succeeded, clear errors and break loop
           lastError = null;
