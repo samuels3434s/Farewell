@@ -46,6 +46,20 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Event Camera">
+
+  <style>
+    /* Hide WebKit native video play buttons and controls */
+    video::-webkit-media-controls {
+      display: none !important;
+    }
+    video::-webkit-media-controls-start-playback-button {
+      display: none !important;
+    }
+    /* Prevent default video background flashes */
+    video {
+      background: transparent !important;
+    }
+  </style>
 </head>
 <body class="h-full flex flex-col font-sans select-none overflow-hidden safe-bottom">
   
@@ -87,7 +101,7 @@
       <div id="camera-container" class="relative w-full aspect-[3/4] max-h-[70vh] rounded-2xl border border-neutral-800 bg-neutral-900/80 shadow-2xl overflow-hidden flex items-center justify-center">
         
         <!-- Video Element (Mirrored dynamically if front camera) -->
-        <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover"></video>
+        <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover opacity-0 transition-opacity duration-300"></video>
 
         <!-- Camera Loading Overlay -->
         <div id="camera-loader" class="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center space-y-4 z-10 transition-opacity duration-300">
@@ -299,6 +313,13 @@
 
     // Gallery state
     let sessionPhotos = [];
+
+    // Listen for the playing event to fade in the video and hide the loader
+    webcam.addEventListener('playing', () => {
+      console.log('Webcam stream playing. Fading in stream...');
+      webcam.classList.remove('opacity-0');
+      cameraLoader.classList.add('opacity-0', 'pointer-events-none');
+    });
     let totalUploadedCount = 0;
     let currentLightboxPhoto = null;
 
@@ -446,6 +467,8 @@
 
       // Show loader overlay on start
       cameraLoader.classList.remove('opacity-0', 'pointer-events-none');
+      // Ensure webcam is hidden until playing
+      webcam.classList.add('opacity-0');
 
       console.log(`Starting camera facing: ${activeFacingMode}...`);
       
@@ -478,9 +501,14 @@
         // Wait for metadata to load to get dimensions
         webcam.onloadedmetadata = () => {
           console.log(`Camera loaded metadata. Aspect ratio: ${webcam.videoWidth}x${webcam.videoHeight}`);
-          // Hide loader overlay with a nice fadeout transition
-          cameraLoader.classList.add('opacity-0', 'pointer-events-none');
         };
+
+        // Explicitly trigger play to ensure fast startup
+        try {
+          await webcam.play();
+        } catch (playErr) {
+          console.warn("webcam.play() was prevented or interrupted:", playErr);
+        }
 
       } catch (err) {
         console.error('Error opening camera stream: ', err);
@@ -495,6 +523,7 @@
         stream = null;
       }
       webcam.srcObject = null;
+      webcam.classList.add('opacity-0');
       // Hide camera loader on stop
       cameraLoader.classList.add('opacity-0', 'pointer-events-none');
     }
