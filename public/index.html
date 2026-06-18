@@ -68,11 +68,17 @@
           <span class="text-[10px] text-neutral-400 font-light tracking-wide uppercase">Guest Event Camera</span>
         </div>
       </div>
-      <div class="flex items-center space-x-2">
+      <div class="flex flex-col items-end space-y-1">
         <!-- Active Status Indicator -->
         <span id="live-indicator" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
           <span class="w-1.5 h-1.5 mr-1 bg-emerald-400 rounded-full animate-pulse"></span> Live Drive
         </span>
+        <!-- Counter stats -->
+        <div class="flex items-center space-x-1.5 text-[9px] text-neutral-400 font-light">
+          <span id="stat-uploading">Uploading: 0</span>
+          <span class="text-neutral-800">•</span>
+          <span id="stat-uploaded">Shared: 0</span>
+        </div>
       </div>
     </header>
 
@@ -82,6 +88,17 @@
         
         <!-- Video Element (Mirrored dynamically if front camera) -->
         <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover"></video>
+
+        <!-- Camera Loading Overlay -->
+        <div id="camera-loader" class="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center space-y-4 z-10 transition-opacity duration-300">
+          <div class="relative w-14 h-14 flex items-center justify-center">
+            <!-- Double spinner rings -->
+            <div class="absolute inset-0 rounded-full border-4 border-t-rose-500 border-r-transparent border-b-transparent border-l-transparent animate-spin"></div>
+            <div class="absolute inset-1.5 rounded-full border-4 border-t-transparent border-r-amber-500 border-b-transparent border-l-transparent animate-spin-slow"></div>
+            <i class="fa-solid fa-camera text-neutral-500 text-sm animate-pulse"></i>
+          </div>
+          <span class="text-[10px] text-neutral-400 font-light tracking-wider uppercase">Accessing Lens...</span>
+        </div>
         
         <!-- Status Overlays inside viewport -->
         
@@ -125,10 +142,11 @@
       <!-- Primary Controls Row -->
       <div class="w-full flex justify-between items-center px-4">
         
-        <!-- Gallery Preview Thumb (Dummy visual to ground layout) -->
-        <div class="w-12 h-12 rounded-full border border-neutral-800 bg-neutral-900/60 flex items-center justify-center text-neutral-500">
-          <i class="fa-solid fa-images text-lg"></i>
-        </div>
+        <!-- Gallery Preview Thumb (Clickable to open session gallery) -->
+        <button id="btn-gallery" class="w-12 h-12 rounded-full border border-neutral-800 bg-neutral-900/60 overflow-hidden flex items-center justify-center text-neutral-500 transition-all active:scale-90 hover:border-neutral-700 focus:outline-none">
+          <i id="gallery-placeholder-icon" class="fa-solid fa-images text-lg"></i>
+          <img id="gallery-thumb-img" src="" class="w-full h-full object-cover hidden" alt="Thumb">
+        </button>
 
         <!-- Capture Trigger (Outer ring + central glow button) -->
         <button id="btn-capture" class="group relative w-20 h-20 rounded-full flex items-center justify-center focus:outline-none transition-transform active:scale-90" disabled>
@@ -183,6 +201,55 @@
         </div>
       </div>
     </div>
+
+    <!-- Session Gallery Drawer Modal -->
+    <div id="gallery-drawer" class="absolute inset-0 z-50 bg-neutral-950/95 flex flex-col hidden animate-fade-in">
+      <!-- Header -->
+      <header class="pt-6 px-5 pb-4 flex justify-between items-center border-b border-neutral-900">
+        <div class="flex items-center space-x-2">
+          <i class="fa-solid fa-images text-rose-500 text-base"></i>
+          <h2 class="text-sm font-semibold text-white">Your Session Photos</h2>
+        </div>
+        <button id="btn-close-gallery" class="w-8 h-8 rounded-full bg-neutral-900 border border-neutral-800 text-neutral-400 flex items-center justify-center hover:text-white transition-all active:scale-90 focus:outline-none">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </header>
+
+      <!-- Photos Grid Container -->
+      <div id="gallery-grid" class="flex-1 overflow-y-auto p-4 grid grid-cols-3 gap-2 align-content-start">
+        <!-- Grid Items injected dynamically -->
+      </div>
+      
+      <!-- Footer details -->
+      <div class="p-4 border-t border-neutral-900 bg-neutral-950/80 text-center">
+        <p class="text-[9px] text-neutral-500 uppercase tracking-wider font-light">
+          Only showing photos taken on this device in this session.
+        </p>
+      </div>
+    </div>
+
+    <!-- Full Screen Photo Lightbox Overlay -->
+    <div id="lightbox" class="absolute inset-0 z-[60] bg-black flex flex-col justify-between hidden animate-fade-in">
+      <!-- Lightbox Header -->
+      <header class="pt-6 px-5 pb-4 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent">
+        <button id="btn-close-lightbox" class="w-8 h-8 rounded-full bg-neutral-900/60 border border-neutral-800 text-white flex items-center justify-center shadow-lg active:scale-90 transition-all focus:outline-none">
+          <i class="fa-solid fa-arrow-left"></i>
+        </button>
+        <span class="text-xs text-neutral-400 font-medium">Photo Preview</span>
+        <button id="btn-download-lightbox" class="w-8 h-8 rounded-full bg-neutral-900/60 border border-neutral-800 text-white flex items-center justify-center shadow-lg active:scale-90 transition-all focus:outline-none">
+          <i class="fa-solid fa-download"></i>
+        </button>
+      </header>
+
+      <!-- Photo Display -->
+      <div class="flex-1 flex items-center justify-center p-2">
+        <img id="lightbox-img" src="" class="max-w-full max-h-[75vh] object-contain rounded-lg shadow-2xl" alt="Full screen preview">
+      </div>
+
+      <!-- Footer spacing -->
+      <div class="h-16 bg-gradient-to-t from-black/80 to-transparent"></div>
+    </div>
+
   </div>
 
   <!-- Javascript Logic -->
@@ -210,6 +277,31 @@
     const btnClosePreview = document.getElementById('btn-close-preview');
     let previewTimeout = null;
 
+    // Camera Loader
+    const cameraLoader = document.getElementById('camera-loader');
+
+    // Counters Elements
+    const statUploading = document.getElementById('stat-uploading');
+    const statUploaded = document.getElementById('stat-uploaded');
+
+    // Gallery & Lightbox Elements
+    const btnGallery = document.getElementById('btn-gallery');
+    const galleryPlaceholderIcon = document.getElementById('gallery-placeholder-icon');
+    const galleryThumbImg = document.getElementById('gallery-thumb-img');
+    const galleryDrawer = document.getElementById('gallery-drawer');
+    const btnCloseGallery = document.getElementById('btn-close-gallery');
+    const galleryGrid = document.getElementById('gallery-grid');
+
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImg = document.getElementById('lightbox-img');
+    const btnCloseLightbox = document.getElementById('btn-close-lightbox');
+    const btnDownloadLightbox = document.getElementById('btn-download-lightbox');
+
+    // Gallery state
+    let sessionPhotos = [];
+    let totalUploadedCount = 0;
+    let currentLightboxPhoto = null;
+
     let stream = null;
     let activeFacingMode = 'environment'; // Default: Back camera
     
@@ -222,7 +314,15 @@
     let successTimeout = null;
     let currentToastElement = null;
 
+    function updateStatCounters() {
+      statUploading.textContent = `Uploading: ${activeUploadsCount}`;
+      statUploaded.textContent = `Shared: ${totalUploadedCount}`;
+    }
+
     function updateStatusIndicator() {
+      // Update stats counters in header
+      updateStatCounters();
+
       // Clear any auto-dismiss timer for success messages
       if (successTimeout) {
         clearTimeout(successTimeout);
@@ -365,6 +465,9 @@
       // Clean up existing stream
       stopCamera();
 
+      // Show loader overlay on start
+      cameraLoader.classList.remove('opacity-0', 'pointer-events-none');
+
       console.log(`Starting camera facing: ${activeFacingMode}...`);
       
       const constraints = {
@@ -396,6 +499,8 @@
         // Wait for metadata to load to get dimensions
         webcam.onloadedmetadata = () => {
           console.log(`Camera loaded metadata. Aspect ratio: ${webcam.videoWidth}x${webcam.videoHeight}`);
+          // Hide loader overlay with a nice fadeout transition
+          cameraLoader.classList.add('opacity-0', 'pointer-events-none');
         };
 
       } catch (err) {
@@ -411,6 +516,8 @@
         stream = null;
       }
       webcam.srcObject = null;
+      // Hide camera loader on stop
+      cameraLoader.classList.add('opacity-0', 'pointer-events-none');
     }
 
     // Check if the current video track is front facing
@@ -549,6 +656,9 @@
           const filename = `photo_${timestamp}.jpg`;
           console.log(`Blob created. Size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
           
+          // Save locally in memory session photos list
+          addPhotoToSession(previewDataUrl, blob, filename);
+
           // Save file locally to device
           savePhotoLocally(blob, filename);
 
@@ -582,6 +692,7 @@
 
         if (response.ok && data.success) {
           // Photo uploaded successfully, updating display
+          totalUploadedCount++;
           updateStatusIndicator();
         } else {
           // If server reports uploads are disabled, update layout
@@ -606,6 +717,74 @@
         updateStatusIndicator();
       }
     }
+
+    // Session Gallery Logic
+    function addPhotoToSession(dataUrl, blob, filename) {
+      const photoObj = {
+        id: Date.now(),
+        dataUrl: dataUrl,
+        blob: blob,
+        filename: filename
+      };
+      sessionPhotos.unshift(photoObj);
+
+      // Update thumb preview in UI
+      galleryPlaceholderIcon.classList.add('hidden');
+      galleryThumbImg.src = dataUrl;
+      galleryThumbImg.classList.remove('hidden');
+    }
+
+    function renderGalleryGrid() {
+      galleryGrid.innerHTML = '';
+      if (sessionPhotos.length === 0) {
+        galleryGrid.innerHTML = `
+          <div class="col-span-3 py-16 text-center text-neutral-500 flex flex-col items-center justify-center space-y-2">
+            <i class="fa-solid fa-image text-3xl opacity-30"></i>
+            <p class="text-[10px] uppercase tracking-wide font-light mt-2">No photos taken yet</p>
+          </div>
+        `;
+        return;
+      }
+
+      sessionPhotos.forEach(photo => {
+        const item = document.createElement('div');
+        item.className = 'aspect-[3/4] rounded-lg overflow-hidden border border-neutral-800 bg-neutral-900 active:scale-95 transition-all cursor-pointer';
+        item.innerHTML = `
+          <img src="${photo.dataUrl}" class="w-full h-full object-cover" alt="Thumbnail">
+        `;
+        item.addEventListener('click', () => {
+          openLightbox(photo);
+        });
+        galleryGrid.appendChild(item);
+      });
+    }
+
+    btnGallery.addEventListener('click', () => {
+      renderGalleryGrid();
+      galleryDrawer.classList.remove('hidden');
+    });
+
+    btnCloseGallery.addEventListener('click', () => {
+      galleryDrawer.classList.add('hidden');
+    });
+
+    function openLightbox(photo) {
+      currentLightboxPhoto = photo;
+      lightboxImg.src = photo.dataUrl;
+      lightbox.classList.remove('hidden');
+    }
+
+    btnCloseLightbox.addEventListener('click', () => {
+      lightbox.classList.add('hidden');
+      lightboxImg.src = '';
+      currentLightboxPhoto = null;
+    });
+
+    btnDownloadLightbox.addEventListener('click', () => {
+      if (currentLightboxPhoto) {
+        savePhotoLocally(currentLightboxPhoto.blob, currentLightboxPhoto.filename);
+      }
+    });
 
     // Event Listeners for permission
     btnRequestPermission.addEventListener('click', startCamera);
