@@ -329,17 +329,7 @@
         successTimeout = null;
       }
 
-      if (activeUploadsCount > 0) {
-        // Show consolidated uploading status
-        ensureToastElement();
-        currentToastElement.className = 'pointer-events-auto bg-neutral-900/95 backdrop-blur-md border border-neutral-800/80 px-4 py-3 rounded-xl text-xs text-neutral-100 flex items-center justify-between shadow-2xl transition-all duration-300';
-        currentToastElement.innerHTML = `
-          <div class="flex items-center space-x-2.5">
-            <i class="fa-solid fa-spinner animate-spin text-rose-500"></i>
-            <span class="font-medium text-[11px]">Uploading ${activeUploadsCount} photo${activeUploadsCount > 1 ? 's' : ''}...</span>
-          </div>
-        `;
-      } else if (failedUploadsQueue.length > 0) {
+      if (failedUploadsQueue.length > 0) {
         // Show consolidated failures with retry option
         ensureToastElement();
         currentToastElement.className = 'pointer-events-auto bg-neutral-900/95 backdrop-blur-md border border-neutral-800/80 px-4 py-3 rounded-xl text-xs text-neutral-100 flex items-center justify-between shadow-2xl transition-all duration-300';
@@ -366,19 +356,8 @@
           });
         }
       } else {
-        // Active = 0, Failures = 0. Briefly flash success if toast is currently shown
-        if (currentToastElement) {
-          currentToastElement.className = 'pointer-events-auto bg-neutral-900/95 backdrop-blur-md border border-neutral-800/80 px-4 py-3 rounded-xl text-xs text-neutral-100 flex items-center justify-between shadow-2xl transition-all duration-300';
-          currentToastElement.innerHTML = `
-            <div class="flex items-center space-x-2.5">
-              <i class="fa-solid fa-circle-check text-emerald-400"></i>
-              <span class="font-medium text-[11px]">Photos uploaded successfully!</span>
-            </div>
-          `;
-          successTimeout = setTimeout(() => {
-            dismissCurrentToast();
-          }, 3000);
-        }
+        // Active = 0, Failures = 0. Dismiss toast if currently shown (no success toast)
+        dismissCurrentToast();
       }
     }
 
