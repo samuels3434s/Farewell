@@ -155,6 +155,34 @@
 
     <!-- Hidden native elements for photo capturing -->
     <canvas id="capture-canvas" class="hidden"></canvas>
+
+    <!-- Captured Photo Preview Modal -->
+    <div id="preview-modal" class="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md hidden animate-fade-in">
+      <div class="bg-neutral-900/95 border border-neutral-800 p-4 rounded-2xl max-w-[260px] w-full flex flex-col items-center space-y-4 shadow-2xl relative">
+        <!-- Close Button -->
+        <button id="btn-close-preview" class="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-neutral-800 border border-neutral-700 text-white flex items-center justify-center shadow-lg active:scale-90 transition-all focus:outline-none">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+
+        <!-- Taken Photo Display (Smaller than camera screen) -->
+        <div class="w-full aspect-[3/4] rounded-xl overflow-hidden border border-neutral-800 bg-neutral-950 flex items-center justify-center shadow-inner">
+          <img id="preview-img" src="" class="w-full h-full object-cover" alt="Captured photo">
+        </div>
+
+        <!-- Info labels -->
+        <div class="text-center w-full">
+          <p class="text-xs font-semibold text-white">Captured Successfully!</p>
+          <div class="flex items-center justify-center space-x-1.5 mt-1 text-[9px]">
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <i class="fa-solid fa-check mr-1"></i> Saved Locally
+            </span>
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <i class="fa-solid fa-cloud-arrow-up mr-1 animate-pulse"></i> Uploading...
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Javascript Logic -->
@@ -175,6 +203,12 @@
     // Status Overlays
     const overlayPermission = document.getElementById('status-permission');
     const overlayPaused = document.getElementById('overlay-paused');
+
+    // Preview Modal Elements
+    const previewModal = document.getElementById('preview-modal');
+    const previewImg = document.getElementById('preview-img');
+    const btnClosePreview = document.getElementById('btn-close-preview');
+    let previewTimeout = null;
 
     let stream = null;
     let activeFacingMode = 'environment'; // Default: Back camera
@@ -406,11 +440,73 @@
       startCamera();
     });
 
+    // Show/Hide captured photo preview modal (instant UI feedback)
+    function showPreviewModal(dataUrl) {
+      if (previewTimeout) {
+        clearTimeout(previewTimeout);
+      }
+      previewImg.src = dataUrl;
+      previewModal.classList.remove('hidden');
+      
+      // Auto-dismiss preview modal after 3.5 seconds
+      previewTimeout = setTimeout(() => {
+        hidePreviewModal();
+      }, 3500);
+    }
+
+    function hidePreviewModal() {
+      previewModal.classList.add('hidden');
+      previewImg.src = '';
+      if (previewTimeout) {
+        clearTimeout(previewTimeout);
+        previewTimeout = null;
+      }
+    }
+
+    btnClosePreview.addEventListener('click', hidePreviewModal);
+    previewModal.addEventListener('click', (e) => {
+      if (e.target === previewModal) {
+        hidePreviewModal();
+      }
+    });
+
+    // Save photo locally to client device
+    function savePhotoLocally(blob, filename) {
+      // 1. Android wrapper integration bridge check
+      if (window.AndroidBridge && window.AndroidBridge.saveImageToGallery) {
+        try {
+          const reader = new FileReader();
+          reader.readAsDataURL(blob);
+          reader.onloadend = function() {
+            const base64data = reader.result;
+            window.AndroidBridge.saveImageToGallery(base64data, filename);
+          };
+          return;
+        } catch (err) {
+          console.error('Failed to pass base64 to Android bridge:', err);
+        }
+      }
+
+      // 2. Standard Web Browser download fallback
+      try {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (err) {
+        console.error('Failed to download file locally:', err);
+      }
+    }
+
     // Capture Image from Webcam stream at native resolution
     btnCapture.addEventListener('click', () => {
       if (!stream || !uploadsEnabled) return;
 
-      // Trigger visual camera shutter flash effect
+      // Trigger visual camera shutter flash effect (instant)
       flashOverlay.classList.remove('transition-opacity');
       flashOverlay.classList.add('opacity-100');
       setTimeout(() => {
@@ -442,6 +538,10 @@
       // Draw the video frame to the hidden canvas
       ctx.drawImage(webcam, 0, 0, captureCanvas.width, captureCanvas.height);
 
+      // Get instant preview Data URL (using lower quality/size so it doesn't block the UI thread)
+      const previewDataUrl = captureCanvas.toDataURL('image/jpeg', 0.6);
+      showPreviewModal(previewDataUrl);
+
       // Convert canvas drawing into uncompressed JPG blob (Quality = 1.0)
       captureCanvas.toBlob((blob) => {
         if (blob) {
@@ -449,6 +549,9 @@
           const filename = `photo_${timestamp}.jpg`;
           console.log(`Blob created. Size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
           
+          // Save file locally to device
+          savePhotoLocally(blob, filename);
+
           // Trigger upload in background immediately, keeping the camera active!
           uploadPhotoInBackground(blob, filename);
         } else {
