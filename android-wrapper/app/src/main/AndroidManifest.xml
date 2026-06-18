@@ -5,6 +5,7 @@
     <!-- Request required permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- Declare camera hardware dependency -->
     <uses-feature android:name="android.hardware.camera" android:required="true" />

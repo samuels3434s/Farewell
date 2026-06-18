@@ -54,20 +54,12 @@ public class MainActivity extends AppCompatActivity {
         // Register JavaScript interface bridge for local photo downloads
         webView.addJavascriptInterface(new WebAppInterface(this), "AndroidBridge");
 
-        // Override WebChromeClient to handle HTML5 permission requests (Camera)
+        // Override WebChromeClient to handle HTML5 permission requests (Camera and Audio)
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onPermissionRequest(final PermissionRequest request) {
-                // Check if requesting camera permission
-                for (String resource : request.getResources()) {
-                    if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)) {
-                        pendingPermissionRequest = request;
-                        checkCameraPermission();
-                        return;
-                    }
-                }
-                // Fallback: Deny other unhandled requests
-                request.deny();
+                pendingPermissionRequest = request;
+                checkPermissionsAndGrant();
             }
         });
 
@@ -75,19 +67,41 @@ public class MainActivity extends AppCompatActivity {
         webView.loadUrl("https://farewell-tl8b.onrender.com");
     }
 
-    private void checkCameraPermission() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) 
-                == PackageManager.PERMISSION_GRANTED) {
-            // Already granted by OS, grant permission inside WebView
-            if (pendingPermissionRequest != null) {
-                pendingPermissionRequest.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
-                pendingPermissionRequest = null;
-            }
+    private void checkPermissionsAndGrant() {
+        boolean hasCamera = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) 
+                == PackageManager.PERMISSION_GRANTED;
+        boolean hasAudio = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) 
+                == PackageManager.PERMISSION_GRANTED;
+
+        if (hasCamera && hasAudio) {
+            grantWebViewPermissions();
         } else {
-            // Request OS level camera permission
+            // Request both camera and audio record permissions
             ActivityCompat.requestPermissions(this, 
-                    new String[]{Manifest.permission.CAMERA}, 
+                    new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO}, 
                     CAMERA_PERMISSION_CODE);
+        }
+    }
+
+    private void grantWebViewPermissions() {
+        if (pendingPermissionRequest != null) {
+            java.util.ArrayList<String> grantedResources = new java.util.ArrayList<>();
+            for (String resource : pendingPermissionRequest.getResources()) {
+                if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource) &&
+                        ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                    grantedResources.add(resource);
+                }
+                if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource) &&
+                        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    grantedResources.add(resource);
+                }
+            }
+            if (!grantedResources.isEmpty()) {
+                pendingPermissionRequest.grant(grantedResources.toArray(new String[0]));
+            } else {
+                pendingPermissionRequest.deny();
+            }
+            pendingPermissionRequest = null;
         }
     }
 
@@ -95,24 +109,12 @@ public class MainActivity extends AppCompatActivity {
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == CAMERA_PERMISSION_CODE) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // OS permission granted! Grant WebView permission
-                if (pendingPermissionRequest != null) {
-                    pendingPermissionRequest.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
-                    pendingPermissionRequest = null;
-                }
-            } else {
-                // OS permission denied, deny WebView permission
-                if (pendingPermissionRequest != null) {
-                    pendingPermissionRequest.deny();
-                    pendingPermissionRequest = null;
-                }
-            }
+            grantWebViewPermissions();
         } else if (requestCode == 200) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(this, "Storage permission granted! Try taking your photo again.", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "Storage permission granted!", Toast.LENGTH_LONG).show();
             } else {
-                Toast.makeText(this, "Storage permission is required to save photos to this device.", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "Storage permission is required to save files to this device.", Toast.LENGTH_LONG).show();
             }
         }
     }
