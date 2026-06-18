@@ -275,13 +275,13 @@ def api_upload():
         if file.filename == '':
             return jsonify({'success': False, 'error': 'Empty filename.'}), 400
 
-        # Format filename: Farewell_YYYYMMDD_HHMMSS.jpg
+        # Format filename: LumiSnap_YYYYMMDD_HHMMSS.jpg
         now = datetime.now()
         timestamp = now.strftime('%Y%m%d_%H%M%S')
         ext = os.path.splitext(file.filename)[1].lower()
         if ext not in ['.jpg', '.jpeg', '.png']:
             ext = '.jpg'
-        filename = f"Farewell_{timestamp}{ext}"
+        filename = f"LumiSnap_{timestamp}{ext}"
 
         file_data = file.read()
         file_size_mb = len(file_data) / (1024 * 1024)

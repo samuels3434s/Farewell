@@ -1,6 +1,6 @@
 {
-  "name": "Event Camera Share",
-  "short_name": "EventCam",
+  "name": "LumiSnap - Event Camera",
+  "short_name": "LumiSnap",
   "description": "Snap photos and share them directly to the event Google Drive folder",
   "start_url": "/",
   "display": "standalone",
