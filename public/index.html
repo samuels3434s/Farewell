@@ -393,18 +393,43 @@
 
     // Helper to generate a video thumbnail using HTML5 video seeking
     function generateVideoThumbnail(videoBlob, callback) {
+      let completed = false;
       const video = document.createElement('video');
-      video.src = URL.createObjectURL(videoBlob);
+      video.style.display = 'none';
+      video.style.position = 'absolute';
+      video.style.width = '0px';
+      video.style.height = '0px';
       video.muted = true;
       video.playsInline = true;
       video.preload = 'metadata';
       
+      const cleanUp = () => {
+        try {
+          if (video.parentNode) {
+            document.body.removeChild(video);
+          }
+          URL.revokeObjectURL(video.src);
+        } catch (e) {}
+      };
+
+      const timeoutId = setTimeout(() => {
+        if (!completed) {
+          completed = true;
+          console.warn("Video thumbnail generation timed out. Proceeding without thumbnail.");
+          cleanUp();
+          callback(null);
+        }
+      }, 1500);
+
       video.onloadeddata = () => {
-        // Seek to 0.1s to capture a valid frame
+        if (completed) return;
         video.currentTime = 0.1;
       };
-      
+
       video.onseeked = () => {
+        if (completed) return;
+        completed = true;
+        clearTimeout(timeoutId);
         try {
           const canvas = document.createElement('canvas');
           canvas.width = 120;
@@ -412,16 +437,35 @@
           const ctx = canvas.getContext('2d');
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+          cleanUp();
           callback(dataUrl);
         } catch (err) {
           console.warn("Failed to capture video frame for thumbnail:", err);
+          cleanUp();
           callback(null);
         }
       };
-      
+
       video.onerror = () => {
+        if (completed) return;
+        completed = true;
+        clearTimeout(timeoutId);
+        cleanUp();
         callback(null);
       };
+
+      try {
+        video.src = URL.createObjectURL(videoBlob);
+        document.body.appendChild(video);
+        video.load();
+      } catch (err) {
+        if (!completed) {
+          completed = true;
+          clearTimeout(timeoutId);
+          cleanUp();
+          callback(null);
+        }
+      }
     }
 
     // Mode Switcher Event Handlers
@@ -710,6 +754,10 @@
         previewImg.classList.add('hidden');
         previewVideo.src = videoUrl;
         previewVideo.classList.remove('hidden');
+        // Explicitly trigger play to ensure autoplay starts on WebView
+        try {
+          previewVideo.play().catch(e => console.warn("Failed to autoplay preview video:", e));
+        } catch (err) {}
       } else {
         previewVideo.classList.add('hidden');
         previewVideo.src = '';
@@ -999,9 +1047,19 @@
       sessionPhotos.unshift(photoObj);
 
       // Update thumb preview in UI
-      galleryPlaceholderIcon.classList.add('hidden');
-      galleryThumbImg.src = dataUrl;
-      galleryThumbImg.classList.remove('hidden');
+      if (dataUrl) {
+        galleryPlaceholderIcon.classList.add('hidden');
+        galleryThumbImg.src = dataUrl;
+        galleryThumbImg.classList.remove('hidden');
+      } else if (type === 'video') {
+        galleryThumbImg.classList.add('hidden');
+        galleryPlaceholderIcon.className = "fa-solid fa-video text-lg text-rose-500 animate-pulse";
+        galleryPlaceholderIcon.classList.remove('hidden');
+      } else {
+        galleryThumbImg.classList.add('hidden');
+        galleryPlaceholderIcon.className = "fa-solid fa-images text-lg text-neutral-500";
+        galleryPlaceholderIcon.classList.remove('hidden');
+      }
     }
 
     function renderGalleryGrid() {
@@ -1021,8 +1079,9 @@
         item.className = 'aspect-[3/4] rounded-lg overflow-hidden border border-neutral-800 bg-neutral-900 active:scale-95 transition-all cursor-pointer relative';
         
         if (photo.type === 'video') {
+          const thumbSrc = photo.dataUrl || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="120" height="160" viewBox="0 0 120 160"><rect width="100%" height="100%" fill="%23171717"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23404040" font-family="sans-serif" font-size="12">Video</text></svg>';
           item.innerHTML = `
-            <img src="${photo.dataUrl}" class="w-full h-full object-cover" alt="Thumbnail">
+            <img src="${thumbSrc}" class="w-full h-full object-cover" alt="Thumbnail">
             <div class="absolute inset-0 bg-black/30 flex items-center justify-center">
               <i class="fa-solid fa-play text-white text-[10px] bg-black/60 p-2 rounded-full border border-white/10"></i>
             </div>
