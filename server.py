@@ -275,11 +275,12 @@ def api_upload():
         if file.filename == '':
             return jsonify({'success': False, 'error': 'Empty filename.'}), 400
 
-        # Format filename: LumiSnap_YYYYMMDD_HHMMSS.jpg
+        # Format filename: LumiSnap_YYYYMMDD_HHMMSS.[ext]
         now = datetime.now()
         timestamp = now.strftime('%Y%m%d_%H%M%S')
         ext = os.path.splitext(file.filename)[1].lower()
-        if ext not in ['.jpg', '.jpeg', '.png']:
+        allowed_extensions = ['.jpg', '.jpeg', '.png', '.mp4', '.webm', '.mov', '.3gp']
+        if ext not in allowed_extensions:
             ext = '.jpg'
         filename = f"LumiSnap_{timestamp}{ext}"
 

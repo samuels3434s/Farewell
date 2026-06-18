@@ -103,6 +103,20 @@
         <!-- Video Element (Mirrored dynamically if front camera) -->
         <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover opacity-0 transition-opacity duration-300"></video>
 
+        <!-- Video Recording Overlay (Red blinking indicator and countdown timer) -->
+        <div id="recording-overlay" class="absolute top-4 left-4 right-4 flex justify-between items-center z-20 pointer-events-none hidden animate-fade-in">
+          <div class="flex items-center space-x-2 bg-black/60 border border-neutral-800 px-3 py-1.5 rounded-full backdrop-blur-md">
+            <span class="relative flex h-2 w-2">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+            </span>
+            <span class="text-[10px] font-bold uppercase tracking-wider text-red-500">Recording</span>
+          </div>
+          <div id="recording-timer" class="bg-black/60 border border-neutral-800 px-3 py-1.5 rounded-full text-[10px] font-mono font-bold text-white tracking-widest backdrop-blur-md">
+            00:00
+          </div>
+        </div>
+
         <!-- Camera Loading Overlay -->
         <div id="camera-loader" class="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center space-y-4 z-10 transition-opacity duration-300">
           <div class="relative w-14 h-14 flex items-center justify-center">
@@ -151,8 +165,15 @@
     </main>
 
     <!-- Camera Actions & Settings Footer -->
-    <footer class="px-6 pb-8 pt-4 flex flex-col justify-end items-center space-y-6">
+    <footer class="px-6 pb-8 pt-4 flex flex-col justify-end items-center space-y-4">
       
+      <!-- Mode Switcher Row -->
+      <div class="flex items-center justify-center space-x-6 bg-neutral-900/60 border border-neutral-800/80 px-4 py-1.5 rounded-full backdrop-blur-md">
+        <button id="btn-mode-photo" class="text-[10px] font-bold uppercase tracking-wider text-rose-500 transition-colors focus:outline-none">Photo</button>
+        <div class="w-[1px] h-3 bg-neutral-800"></div>
+        <button id="btn-mode-video" class="text-[10px] font-bold uppercase tracking-wider text-neutral-500 hover:text-neutral-300 transition-colors focus:outline-none">Video</button>
+      </div>
+
       <!-- Primary Controls Row -->
       <div class="w-full flex justify-between items-center px-4">
         
@@ -167,8 +188,8 @@
           <!-- Outer border ring -->
           <div class="absolute inset-0 rounded-full border-4 border-neutral-700 group-hover:border-white transition-colors duration-200"></div>
           <!-- Inner circle -->
-          <div class="w-16 h-16 rounded-full bg-gradient-to-tr from-rose-500 to-amber-500 group-active:from-rose-600 group-active:to-amber-600 shadow-lg shadow-rose-500/30 flex items-center justify-center transition-all">
-            <i class="fa-solid fa-camera text-white text-xl"></i>
+          <div id="btn-capture-inner" class="w-16 h-16 rounded-full bg-gradient-to-tr from-rose-500 to-amber-500 shadow-lg shadow-rose-500/30 flex items-center justify-center transition-all">
+            <i id="btn-capture-icon" class="fa-solid fa-camera text-white text-xl"></i>
           </div>
         </button>
 
@@ -179,7 +200,7 @@
       </div>
 
       <!-- Detail/Subtext -->
-      <p class="text-[10px] text-neutral-500 text-center tracking-wide uppercase font-light">
+      <p id="subtext-description" class="text-[10px] text-neutral-500 text-center tracking-wide uppercase font-light">
         Photos are uploaded at full native resolution directly to the album.
       </p>
 
@@ -197,8 +218,9 @@
         </button>
 
         <!-- Taken Photo Display (Smaller than camera screen) -->
-        <div class="w-full aspect-[3/4] rounded-xl overflow-hidden border border-neutral-800 bg-neutral-950 flex items-center justify-center shadow-inner">
+        <div class="w-full aspect-[3/4] rounded-xl overflow-hidden border border-neutral-800 bg-neutral-950 flex items-center justify-center shadow-inner relative">
           <img id="preview-img" src="" class="w-full h-full object-cover" alt="Captured photo">
+          <video id="preview-video" autoplay loop muted playsinline class="w-full h-full object-cover hidden"></video>
         </div>
 
         <!-- Info labels -->
@@ -256,8 +278,9 @@
       </header>
 
       <!-- Photo Display -->
-      <div class="flex-1 flex items-center justify-center p-2">
+      <div class="flex-1 flex items-center justify-center p-2 relative">
         <img id="lightbox-img" src="" class="max-w-full max-h-[75vh] object-contain rounded-lg shadow-2xl" alt="Full screen preview">
+        <video id="lightbox-video" controls autoplay loop playsinline class="max-w-full max-h-[75vh] object-contain rounded-lg shadow-2xl hidden"></video>
       </div>
 
       <!-- Footer spacing -->
@@ -311,6 +334,22 @@
     const btnCloseLightbox = document.getElementById('btn-close-lightbox');
     const btnDownloadLightbox = document.getElementById('btn-download-lightbox');
 
+    // Mode Switcher Buttons
+    const btnModePhoto = document.getElementById('btn-mode-photo');
+    const btnModeVideo = document.getElementById('btn-mode-video');
+    const recordingOverlay = document.getElementById('recording-overlay');
+    const recordingTimer = document.getElementById('recording-timer');
+    const previewVideo = document.getElementById('preview-video');
+    const lightboxVideo = document.getElementById('lightbox-video');
+
+    // Video Recording State
+    let activeCaptureMode = 'photo'; // 'photo' or 'video'
+    let isRecording = false;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let recordingInterval = null;
+    let recordingDuration = 0;
+
     // Gallery state
     let sessionPhotos = [];
 
@@ -331,9 +370,101 @@
 
     // Single Status Notification System State
     let activeUploadsCount = 0;
-    let failedUploadsQueue = []; // Holds arrays of {blob, filename} for retries
+    let failedUploadsQueue = []; // Holds arrays of {blob, filename, type} for retries
     let successTimeout = null;
     let currentToastElement = null;
+
+    // Helper to detect supported mime type for video recording
+    function getSupportedMimeType() {
+      const types = [
+        'video/mp4;codecs=h264',
+        'video/mp4',
+        'video/webm;codecs=h264',
+        'video/webm;codecs=vp8',
+        'video/webm'
+      ];
+      for (const type of types) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          return type;
+        }
+      }
+      return '';
+    }
+
+    // Helper to generate a video thumbnail using HTML5 video seeking
+    function generateVideoThumbnail(videoBlob, callback) {
+      const video = document.createElement('video');
+      video.src = URL.createObjectURL(videoBlob);
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = 'metadata';
+      
+      video.onloadeddata = () => {
+        // Seek to 0.1s to capture a valid frame
+        video.currentTime = 0.1;
+      };
+      
+      video.onseeked = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 120;
+          canvas.height = 160;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+          callback(dataUrl);
+        } catch (err) {
+          console.warn("Failed to capture video frame for thumbnail:", err);
+          callback(null);
+        }
+      };
+      
+      video.onerror = () => {
+        callback(null);
+      };
+    }
+
+    // Mode Switcher Event Handlers
+    btnModePhoto.addEventListener('click', () => {
+      if (isRecording) stopRecording();
+      activeCaptureMode = 'photo';
+      
+      // Update UI classes
+      btnModePhoto.className = "text-[10px] font-bold uppercase tracking-wider text-rose-500 transition-colors focus:outline-none";
+      btnModeVideo.className = "text-[10px] font-bold uppercase tracking-wider text-neutral-500 hover:text-neutral-300 transition-colors focus:outline-none";
+      document.getElementById('subtext-description').textContent = "Photos are uploaded at full native resolution directly to the album.";
+      
+      updateCaptureButtonUI();
+    });
+
+    btnModeVideo.addEventListener('click', () => {
+      activeCaptureMode = 'video';
+      
+      // Update UI classes
+      btnModeVideo.className = "text-[10px] font-bold uppercase tracking-wider text-rose-500 transition-colors focus:outline-none";
+      btnModePhoto.className = "text-[10px] font-bold uppercase tracking-wider text-neutral-500 hover:text-neutral-300 transition-colors focus:outline-none";
+      document.getElementById('subtext-description').textContent = "Videos are recorded up to 15s in background.";
+      
+      updateCaptureButtonUI();
+    });
+
+    function updateCaptureButtonUI() {
+      const inner = document.getElementById('btn-capture-inner');
+      const icon = document.getElementById('btn-capture-icon');
+      
+      if (activeCaptureMode === 'photo') {
+        inner.className = "w-16 h-16 rounded-full bg-gradient-to-tr from-rose-500 to-amber-500 shadow-lg shadow-rose-500/30 flex items-center justify-center transition-all";
+        inner.innerHTML = '<i id="btn-capture-icon" class="fa-solid fa-camera text-white text-xl"></i>';
+      } else {
+        if (isRecording) {
+          inner.className = "w-10 h-10 rounded-lg bg-red-600 shadow-lg shadow-red-500/30 flex items-center justify-center transition-all duration-200";
+          inner.innerHTML = '';
+        } else {
+          inner.className = "w-16 h-16 rounded-full bg-red-600 shadow-lg shadow-red-500/30 flex items-center justify-center transition-all duration-200";
+          inner.innerHTML = '<i id="btn-capture-icon" class="fa-solid fa-video text-white text-lg"></i>';
+        }
+      }
+    }
 
     function updateStatCounters() {
       statUploading.textContent = `Uploading: ${activeUploadsCount}`;
@@ -359,7 +490,7 @@
         currentToastElement.innerHTML = `
           <div class="flex items-center space-x-2.5">
             <i class="fa-solid fa-circle-exclamation text-rose-500"></i>
-            <span class="font-medium text-[11px]">${count} photo${count > 1 ? 's' : ''} failed to upload.</span>
+            <span class="font-medium text-[11px]">${count} file${count > 1 ? 's' : ''} failed to upload.</span>
           </div>
           <button class="btn-toast-retry-all text-[10px] text-white bg-rose-500/20 border border-rose-500/35 hover:bg-rose-500/30 px-2 py-0.5 rounded font-semibold transition-colors">Retry All</button>
         `;
@@ -372,7 +503,7 @@
             failedUploadsQueue = [];
             dismissCurrentToast();
             itemsToRetry.forEach(item => {
-              uploadPhotoInBackground(item.blob, item.filename);
+              uploadPhotoInBackground(item.blob, item.filename, item.type);
             });
           });
         }
@@ -475,11 +606,11 @@
       const constraints = {
         video: {
           facingMode: { ideal: activeFacingMode },
-          // Request maximum resolutions to capture uncompressed full-quality files
+          // Request maximum resolutions to capture uncompressed files
           width: { ideal: 4096 },
           height: { ideal: 2160 }
         },
-        audio: false
+        audio: true // Request audio permission for videos
       };
 
       try {
@@ -512,8 +643,22 @@
 
       } catch (err) {
         console.error('Error opening camera stream: ', err);
-        overlayPermission.classList.remove('hidden');
-        btnCapture.disabled = true;
+        // Fallback: request without audio if micro permission was denied
+        try {
+          constraints.audio = false;
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+          webcam.srcObject = stream;
+          overlayPermission.classList.add('hidden');
+          btnCapture.disabled = false;
+          webcam.onloadedmetadata = () => {
+            console.log(`Camera loaded metadata (no audio).`);
+          };
+          await webcam.play();
+        } catch (innerErr) {
+          console.error('Failed to fallback to webcam without audio:', innerErr);
+          overlayPermission.classList.remove('hidden');
+          btnCapture.disabled = true;
+        }
       }
     }
 
@@ -555,23 +700,37 @@
       startCamera();
     });
 
-    // Show/Hide captured photo preview modal (instant UI feedback)
-    function showPreviewModal(dataUrl) {
+    // Show/Hide captured photo/video preview modal (instant UI feedback)
+    function showPreviewModal(dataUrl, type = 'photo', videoUrl = '') {
       if (previewTimeout) {
         clearTimeout(previewTimeout);
       }
-      previewImg.src = dataUrl;
+      
+      if (type === 'video') {
+        previewImg.classList.add('hidden');
+        previewVideo.src = videoUrl;
+        previewVideo.classList.remove('hidden');
+      } else {
+        previewVideo.classList.add('hidden');
+        previewVideo.src = '';
+        previewImg.src = dataUrl;
+        previewImg.classList.remove('hidden');
+      }
+      
       previewModal.classList.remove('hidden');
       
-      // Auto-dismiss preview modal after 3.5 seconds
+      // Auto-dismiss preview modal after 4.5 seconds for videos, 3.5 for photos
+      const duration = type === 'video' ? 4500 : 3500;
       previewTimeout = setTimeout(() => {
         hidePreviewModal();
-      }, 3500);
+      }, duration);
     }
 
     function hidePreviewModal() {
       previewModal.classList.add('hidden');
       previewImg.src = '';
+      previewVideo.src = '';
+      previewVideo.classList.add('hidden');
       if (previewTimeout) {
         clearTimeout(previewTimeout);
         previewTimeout = null;
@@ -585,20 +744,34 @@
       }
     });
 
-    // Save photo locally to client device
-    function savePhotoLocally(blob, filename) {
+    // Save photo/video locally to client device
+    function savePhotoLocally(blob, filename, type = 'photo') {
       // 1. Android wrapper integration bridge check
-      if (window.AndroidBridge && window.AndroidBridge.saveImageToGallery) {
-        try {
-          const reader = new FileReader();
-          reader.readAsDataURL(blob);
-          reader.onloadend = function() {
-            const base64data = reader.result;
-            window.AndroidBridge.saveImageToGallery(base64data, filename);
-          };
-          return;
-        } catch (err) {
-          console.error('Failed to pass base64 to Android bridge:', err);
+      if (window.AndroidBridge) {
+        if (type === 'video' && window.AndroidBridge.saveVideoToGallery) {
+          try {
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = function() {
+              const base64data = reader.result;
+              window.AndroidBridge.saveVideoToGallery(base64data, filename);
+            };
+            return;
+          } catch (err) {
+            console.error('Failed to pass base64 video to Android bridge:', err);
+          }
+        } else if (type === 'photo' && window.AndroidBridge.saveImageToGallery) {
+          try {
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = function() {
+              const base64data = reader.result;
+              window.AndroidBridge.saveImageToGallery(base64data, filename);
+            };
+            return;
+          } catch (err) {
+            console.error('Failed to pass base64 image to Android bridge:', err);
+          }
         }
       }
 
@@ -617,72 +790,162 @@
       }
     }
 
-    // Capture Image from Webcam stream at native resolution
+    // Capture Image or record Video from stream
     btnCapture.addEventListener('click', () => {
       if (!stream || !uploadsEnabled) return;
 
-      // Trigger visual camera shutter flash effect (instant)
-      flashOverlay.classList.remove('transition-opacity');
-      flashOverlay.classList.add('opacity-100');
-      setTimeout(() => {
-        flashOverlay.classList.add('transition-opacity');
-        flashOverlay.classList.remove('opacity-100');
-      }, 100);
+      if (activeCaptureMode === 'photo') {
+        // PHOTO MODE
+        // Trigger visual camera shutter flash effect (instant)
+        flashOverlay.classList.remove('transition-opacity');
+        flashOverlay.classList.add('opacity-100');
+        setTimeout(() => {
+          flashOverlay.classList.add('transition-opacity');
+          flashOverlay.classList.remove('opacity-100');
+        }, 100);
 
-      // Extract raw tracks dimensions to capture full resolution
-      const videoTrack = stream.getVideoTracks()[0];
-      const settings = videoTrack.getSettings();
-      const captureWidth = settings.width || webcam.videoWidth;
-      const captureHeight = settings.height || webcam.videoHeight;
-      
-      console.log(`Capturing frame at full native resolution: ${captureWidth}x${captureHeight}`);
+        const videoTrack = stream.getVideoTracks()[0];
+        const settings = videoTrack.getSettings();
+        const captureWidth = settings.width || webcam.videoWidth;
+        const captureHeight = settings.height || webcam.videoHeight;
+        
+        console.log(`Capturing frame at full native resolution: ${captureWidth}x${captureHeight}`);
 
-      // Set canvas dimension matching native camera stream
-      captureCanvas.width = captureWidth;
-      captureCanvas.height = captureHeight;
+        captureCanvas.width = captureWidth;
+        captureCanvas.height = captureHeight;
 
-      const ctx = captureCanvas.getContext('2d');
-      
-      // If camera is front-facing, mirror the drawn image as well for natural capture
-      const isFront = isFrontFacingTrack(stream);
-      if (isFront) {
-        ctx.translate(captureCanvas.width, 0);
-        ctx.scale(-1, 1);
-      }
-
-      // Draw the video frame to the hidden canvas
-      ctx.drawImage(webcam, 0, 0, captureCanvas.width, captureCanvas.height);
-
-      // Get instant preview Data URL (using lower quality/size so it doesn't block the UI thread)
-      const previewDataUrl = captureCanvas.toDataURL('image/jpeg', 0.6);
-      showPreviewModal(previewDataUrl);
-
-      // Convert canvas drawing into uncompressed JPG blob (Quality = 1.0)
-      captureCanvas.toBlob((blob) => {
-        if (blob) {
-          const timestamp = Date.now();
-          const filename = `photo_${timestamp}.jpg`;
-          console.log(`Blob created. Size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
-          
-          // Save locally in memory session photos list
-          addPhotoToSession(previewDataUrl, blob, filename);
-
-          // Save file locally to device
-          savePhotoLocally(blob, filename);
-
-          // Trigger upload in background immediately, keeping the camera active!
-          uploadPhotoInBackground(blob, filename);
-        } else {
-          // If canvas capture fails, add to failure list
-          failedUploadsQueue.push({ blob: null, filename: `failed_capture_${Date.now()}.jpg` });
-          updateStatusIndicator();
+        const ctx = captureCanvas.getContext('2d');
+        
+        const isFront = isFrontFacingTrack(stream);
+        if (isFront) {
+          ctx.translate(captureCanvas.width, 0);
+          ctx.scale(-1, 1);
         }
-      }, 'image/jpeg', 1.0);
+
+        ctx.drawImage(webcam, 0, 0, captureCanvas.width, captureCanvas.height);
+
+        const previewDataUrl = captureCanvas.toDataURL('image/jpeg', 0.6);
+        showPreviewModal(previewDataUrl, 'photo');
+
+        captureCanvas.toBlob((blob) => {
+          if (blob) {
+            const timestamp = Date.now();
+            const filename = `photo_${timestamp}.jpg`;
+            console.log(`Blob created. Size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
+            
+            addPhotoToSession(previewDataUrl, blob, filename, 'photo');
+            savePhotoLocally(blob, filename, 'photo');
+            uploadPhotoInBackground(blob, filename, 'photo');
+          } else {
+            failedUploadsQueue.push({ blob: null, filename: `failed_capture_${Date.now()}.jpg`, type: 'photo' });
+            updateStatusIndicator();
+          }
+        }, 'image/jpeg', 1.0);
+
+      } else {
+        // VIDEO MODE
+        if (!isRecording) {
+          startRecording();
+        } else {
+          stopRecording();
+        }
+      }
     });
 
-    // Send photo in background
-    async function uploadPhotoInBackground(blob, filename) {
-      // Increment active uploads and update display banner
+    function startRecording() {
+      if (isRecording) return;
+      
+      const mimeType = getSupportedMimeType();
+      if (!mimeType) {
+        alert("Video recording is not supported on this browser/device.");
+        return;
+      }
+      
+      console.log(`Starting MediaRecorder with mime type: ${mimeType}`);
+      recordedChunks = [];
+      
+      try {
+        mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
+        
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            recordedChunks.push(e.data);
+          }
+        };
+        
+        mediaRecorder.onstop = handleRecordingStop;
+        
+        isRecording = true;
+        mediaRecorder.start();
+        
+        // Show recording overlay and start timer
+        recordingOverlay.classList.remove('hidden');
+        recordingDuration = 0;
+        recordingTimer.textContent = "00:00";
+        
+        recordingInterval = setInterval(() => {
+          recordingDuration++;
+          const secs = recordingDuration % 60;
+          const mins = Math.floor(recordingDuration / 60);
+          recordingTimer.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+          
+          if (recordingDuration >= 15) { // Auto-stop at 15 seconds
+            stopRecording();
+          }
+        }, 1000);
+        
+        updateCaptureButtonUI();
+        
+      } catch (err) {
+        console.error("Failed to start MediaRecorder:", err);
+      }
+    }
+
+    function stopRecording() {
+      if (!isRecording) return;
+      isRecording = false;
+      
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+      
+      if (recordingInterval) {
+        clearInterval(recordingInterval);
+        recordingInterval = null;
+      }
+      
+      recordingOverlay.classList.add('hidden');
+      updateCaptureButtonUI();
+    }
+
+    function handleRecordingStop() {
+      if (recordedChunks.length === 0) {
+        console.warn("No video chunks recorded.");
+        return;
+      }
+      
+      const mimeType = mediaRecorder.mimeType || 'video/mp4';
+      const videoBlob = new Blob(recordedChunks, { type: mimeType });
+      const timestamp = Date.now();
+      const ext = mimeType.includes('mp4') ? '.mp4' : '.webm';
+      const filename = `video_${timestamp}${ext}`;
+      
+      console.log(`Video Blob created. Size: ${(videoBlob.size / 1024 / 1024).toFixed(2)} MB, Type: ${mimeType}`);
+      
+      // Generate a thumbnail to show in the session list and previews
+      generateVideoThumbnail(videoBlob, (thumbnailUrl) => {
+        const finalThumb = thumbnailUrl || ''; // Fallback
+        const videoUrl = URL.createObjectURL(videoBlob);
+        
+        addPhotoToSession(finalThumb, videoBlob, filename, 'video', videoUrl);
+        showPreviewModal(finalThumb, 'video', videoUrl);
+        savePhotoLocally(videoBlob, filename, 'video');
+        uploadPhotoInBackground(videoBlob, filename, 'video');
+      });
+    }
+
+    // Send media in background
+    async function uploadPhotoInBackground(blob, filename, type = 'photo') {
       activeUploadsCount++;
       updateStatusIndicator();
 
@@ -699,11 +962,9 @@
         activeUploadsCount = Math.max(0, activeUploadsCount - 1);
 
         if (response.ok && data.success) {
-          // Photo uploaded successfully, updating display
           totalUploadedCount++;
           updateStatusIndicator();
         } else {
-          // If server reports uploads are disabled, update layout
           if (response.status === 400 && data.error && data.error.includes('closed')) {
             uploadsEnabled = false;
             overlayPaused.classList.remove('hidden');
@@ -713,26 +974,27 @@
             dismissCurrentToast();
             failedUploadsQueue = [];
           } else {
-            // Queue failure
-            failedUploadsQueue.push({ blob, filename });
+            failedUploadsQueue.push({ blob, filename, type });
             updateStatusIndicator();
           }
         }
       } catch (err) {
         console.error('Error during upload request: ', err);
         activeUploadsCount = Math.max(0, activeUploadsCount - 1);
-        failedUploadsQueue.push({ blob, filename });
+        failedUploadsQueue.push({ blob, filename, type });
         updateStatusIndicator();
       }
     }
 
     // Session Gallery Logic
-    function addPhotoToSession(dataUrl, blob, filename) {
+    function addPhotoToSession(dataUrl, blob, filename, type = 'photo', videoUrl = '') {
       const photoObj = {
         id: Date.now(),
         dataUrl: dataUrl,
+        videoUrl: videoUrl,
         blob: blob,
-        filename: filename
+        filename: filename,
+        type: type
       };
       sessionPhotos.unshift(photoObj);
 
@@ -756,10 +1018,21 @@
 
       sessionPhotos.forEach(photo => {
         const item = document.createElement('div');
-        item.className = 'aspect-[3/4] rounded-lg overflow-hidden border border-neutral-800 bg-neutral-900 active:scale-95 transition-all cursor-pointer';
-        item.innerHTML = `
-          <img src="${photo.dataUrl}" class="w-full h-full object-cover" alt="Thumbnail">
-        `;
+        item.className = 'aspect-[3/4] rounded-lg overflow-hidden border border-neutral-800 bg-neutral-900 active:scale-95 transition-all cursor-pointer relative';
+        
+        if (photo.type === 'video') {
+          item.innerHTML = `
+            <img src="${photo.dataUrl}" class="w-full h-full object-cover" alt="Thumbnail">
+            <div class="absolute inset-0 bg-black/30 flex items-center justify-center">
+              <i class="fa-solid fa-play text-white text-[10px] bg-black/60 p-2 rounded-full border border-white/10"></i>
+            </div>
+          `;
+        } else {
+          item.innerHTML = `
+            <img src="${photo.dataUrl}" class="w-full h-full object-cover" alt="Thumbnail">
+          `;
+        }
+        
         item.addEventListener('click', () => {
           openLightbox(photo);
         });
@@ -778,19 +1051,30 @@
 
     function openLightbox(photo) {
       currentLightboxPhoto = photo;
-      lightboxImg.src = photo.dataUrl;
+      if (photo.type === 'video') {
+        lightboxImg.classList.add('hidden');
+        lightboxVideo.src = photo.videoUrl;
+        lightboxVideo.classList.remove('hidden');
+      } else {
+        lightboxVideo.classList.add('hidden');
+        lightboxVideo.src = '';
+        lightboxImg.src = photo.dataUrl;
+        lightboxImg.classList.remove('hidden');
+      }
       lightbox.classList.remove('hidden');
     }
 
     btnCloseLightbox.addEventListener('click', () => {
       lightbox.classList.add('hidden');
       lightboxImg.src = '';
+      lightboxVideo.src = '';
+      lightboxVideo.classList.add('hidden');
       currentLightboxPhoto = null;
     });
 
     btnDownloadLightbox.addEventListener('click', () => {
       if (currentLightboxPhoto) {
-        savePhotoLocally(currentLightboxPhoto.blob, currentLightboxPhoto.filename);
+        savePhotoLocally(currentLightboxPhoto.blob, currentLightboxPhoto.filename, currentLightboxPhoto.type);
       }
     });
 

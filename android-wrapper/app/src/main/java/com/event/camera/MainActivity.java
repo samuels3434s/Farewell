@@ -204,6 +204,67 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
+        @JavascriptInterface
+        public void saveVideoToGallery(String base64Video, String filename) {
+            try {
+                // Check write permission for Android 9 and below
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                    if (ContextCompat.checkSelfPermission(mContext, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                            != PackageManager.PERMISSION_GRANTED) {
+                        ActivityCompat.requestPermissions((MainActivity) mContext,
+                                new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                                200);
+                        showToast("Please grant storage permission and try again.");
+                        return;
+                    }
+                }
+
+                // Remove data URL prefix if present
+                if (base64Video.startsWith("data:video")) {
+                    base64Video = base64Video.substring(base64Video.indexOf(",") + 1);
+                }
+
+                // Decode base64 string
+                byte[] decodedString = Base64.decode(base64Video, Base64.DEFAULT);
+
+                OutputStream fos;
+                Uri videoUri = null;
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Video.Media.DISPLAY_NAME, filename);
+                values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/EventCamera");
+                    values.put(MediaStore.Video.Media.IS_PENDING, 1);
+                    videoUri = mContext.getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
+                } else {
+                    videoUri = mContext.getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
+                }
+
+                if (videoUri != null) {
+                    fos = mContext.getContentResolver().openOutputStream(videoUri);
+                    if (fos != null) {
+                        fos.write(decodedString);
+                        fos.close();
+                    }
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        values.clear();
+                        values.put(MediaStore.Video.Media.IS_PENDING, 0);
+                        mContext.getContentResolver().update(videoUri, values, null, null);
+                    }
+
+                    showToast("Video saved to Gallery!");
+                } else {
+                    showToast("Failed to save video to storage.");
+                }
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                showToast("Error saving video: " + e.getMessage());
+            }
+        }
+
         private void showToast(final String message) {
             runOnUiThread(new Runnable() {
                 @Override
