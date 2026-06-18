@@ -63,8 +63,24 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        // Request camera and microphone permissions on startup to avoid async WebView timing race conditions
+        requestPermissionsOnStartup();
+
         // Load your deployed Web App URL
         webView.loadUrl("https://farewell-tl8b.onrender.com");
+    }
+
+    private void requestPermissionsOnStartup() {
+        boolean hasCamera = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) 
+                == PackageManager.PERMISSION_GRANTED;
+        boolean hasAudio = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) 
+                == PackageManager.PERMISSION_GRANTED;
+        
+        if (!hasCamera || !hasAudio) {
+            ActivityCompat.requestPermissions(this, 
+                    new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO}, 
+                    CAMERA_PERMISSION_CODE);
+        }
     }
 
     private void checkPermissionsAndGrant() {
