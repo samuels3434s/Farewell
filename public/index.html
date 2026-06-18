@@ -697,22 +697,27 @@
       console.log(`Starting camera facing: ${activeFacingMode}...`);
       
       const constraintOptions = [
-        // 1. Full HD (1080p) with audio
+        // 1. Full HD (1080p) with raw audio (no voice filters for high-fidelity event recording)
         {
           video: { facingMode: { ideal: activeFacingMode }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-          audio: { echoCancellation: true, noiseSuppression: true }
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
         },
-        // 2. Standard HD (720p) with audio
+        // 2. Standard HD (720p) with raw audio
         {
           video: { facingMode: { ideal: activeFacingMode }, width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: { echoCancellation: true, noiseSuppression: true }
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
         },
-        // 3. System default with audio
+        // 3. System default with raw audio
+        {
+          video: { facingMode: { ideal: activeFacingMode } },
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+        },
+        // 4. Fallback: system default with standard audio
         {
           video: { facingMode: { ideal: activeFacingMode } },
           audio: true
         },
-        // 4. Fallback: video only (no audio)
+        // 5. Fallback: video only (no audio)
         {
           video: { facingMode: { ideal: activeFacingMode } },
           audio: false
@@ -986,7 +991,20 @@
       recordedChunks = [];
       
       try {
-        mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
+        // Safe check: if stream has no audio tracks, remove audio codecs from mimeType to prevent constructor from throwing NotSupportedError
+        let selectedMimeType = mimeType;
+        const hasAudioTracks = stream.getAudioTracks().length > 0;
+        if (!hasAudioTracks && selectedMimeType) {
+          console.warn("Stream has no active audio tracks. Stripping audio codecs from MediaRecorder MIME type.");
+          selectedMimeType = selectedMimeType.replace(/,opus/g, '').replace(/,aac/g, '');
+        }
+
+        try {
+          mediaRecorder = new MediaRecorder(stream, { mimeType: selectedMimeType });
+        } catch (mimeErr) {
+          console.warn(`Failed to initialize MediaRecorder with MIME type "${selectedMimeType}". Falling back to browser default recorder settings...`, mimeErr);
+          mediaRecorder = new MediaRecorder(stream);
+        }
         
         mediaRecorder.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) {
@@ -996,8 +1014,9 @@
         
         mediaRecorder.onstop = handleRecordingStop;
         
-        isRecording = true;
+        // Start recording and update UI state only on successful startup
         mediaRecorder.start();
+        isRecording = true;
         
         // Show recording overlay and start timer
         recordingOverlay.classList.remove('hidden');
@@ -1019,6 +1038,7 @@
         
       } catch (err) {
         console.error("Failed to start MediaRecorder:", err);
+        alert("Failed to start video recording: " + err.message);
       }
     }
 
